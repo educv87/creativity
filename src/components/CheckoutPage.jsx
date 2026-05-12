@@ -26,7 +26,10 @@ const CheckoutPage = () => {
     nombre: '',
     email: '',
     telefono: '',
-    direccion: '',
+    calle_numero: '',
+    colonia: '',
+    ciudad: '',
+    estado: '',
     cp: ''
   });
 
@@ -209,13 +212,16 @@ const CheckoutPage = () => {
 
 
   const handlePayment = async () => {
-    if (!customer.nombre || !customer.email || !customer.direccion) {
-      alert('Por favor completa tus datos de envío.');
+    if (!customer.nombre || !customer.email || !customer.calle_numero || !customer.colonia || !customer.cp) {
+      alert('Por favor completa tus datos de envío (Nombre, Calle, Colonia y CP son obligatorios).');
       return;
     }
+
+    const fullDireccion = `${customer.calle_numero}, ${customer.colonia}, ${customer.ciudad}, ${customer.estado}`;
     
     const orderData = {
       ...customer,
+      direccion: fullDireccion,
       items: cart,
       subtotal: finalTotal,
       envio: selectedShipping ? selectedShipping.price : 0,
@@ -240,11 +246,11 @@ const CheckoutPage = () => {
         <button onClick={() => navigate('/')} className="text-sm font-bold text-gray-500 hover:text-gray-900">Volver al inicio</button>
       </nav>
 
-      <div className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-2 gap-8 items-center relative z-10 min-h-[calc(100vh-72px)] lg:h-[calc(100vh-72px)]">
+      <div className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-2 gap-8 items-start relative z-10 min-h-[calc(100vh-72px)] lg:pt-10">
         
         {/* Lado Izquierdo: Visualizador Dinámico y Galería */}
         <div className="flex flex-col gap-4 w-full">
-          <div className="relative w-full aspect-square bg-gray-100 rounded-[3rem] shadow-inner flex items-center justify-center p-8 lg:p-16 overflow-hidden">
+          <div className="relative w-full aspect-square bg-gray-100 rounded-[3rem] shadow-inner flex items-center justify-center p-6 lg:p-12 overflow-hidden">
             
             {/* Fondo Orgánico */}
             <div className={`absolute inset-0 organic-blob opacity-40 blur-3xl transition-colors duration-700 ${activeColor.tint}`}></div>
@@ -741,13 +747,43 @@ const CheckoutPage = () => {
                     />
                   </div>
                   <div className="space-y-2 md:col-span-2">
-                    <label className="text-xs font-bold tracking-widest text-gray-400 uppercase">Dirección Completa</label>
+                    <label className="text-xs font-bold tracking-widest text-gray-400 uppercase">Calle y Número</label>
                     <input 
                       type="text" 
-                      value={customer.direccion}
-                      onChange={(e) => setCustomer({...customer, direccion: e.target.value})}
+                      value={customer.calle_numero}
+                      onChange={(e) => setCustomer({...customer, calle_numero: e.target.value})}
                       className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 font-medium text-gray-900 focus:outline-none focus:border-blue-500 focus:bg-white transition-colors" 
-                      placeholder="Calle, número exterior, colonia..." 
+                      placeholder="Ej. Av. Constituyentes 123" 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold tracking-widest text-gray-400 uppercase">Colonia</label>
+                    <input 
+                      type="text" 
+                      value={customer.colonia}
+                      onChange={(e) => setCustomer({...customer, colonia: e.target.value})}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 font-medium text-gray-900 focus:outline-none focus:border-blue-500 focus:bg-white transition-colors" 
+                      placeholder="Ej. Centro" 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold tracking-widest text-gray-400 uppercase">Ciudad</label>
+                    <input 
+                      type="text" 
+                      value={customer.ciudad}
+                      onChange={(e) => setCustomer({...customer, ciudad: e.target.value})}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 font-medium text-gray-900 focus:outline-none focus:border-blue-500 focus:bg-white transition-colors" 
+                      placeholder="Ej. Querétaro" 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold tracking-widest text-gray-400 uppercase">Estado</label>
+                    <input 
+                      type="text" 
+                      value={customer.estado}
+                      onChange={(e) => setCustomer({...customer, estado: e.target.value})}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 font-medium text-gray-900 focus:outline-none focus:border-blue-500 focus:bg-white transition-colors" 
+                      placeholder="Ej. Querétaro" 
                     />
                   </div>
                   <div className="space-y-2">

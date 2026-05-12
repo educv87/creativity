@@ -43,6 +43,32 @@ export const getShippingQuotes = async (destinationZip, totalItems) => {
   }
 };
 
+/**
+ * Crea un envío (Shipment) en Skydropx
+ * @param {string} orderId ID de la orden en Supabase
+ */
+export const createShipment = async (orderId) => {
+  try {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/shipping-quotes`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+      },
+      body: JSON.stringify({
+        order_id: orderId,
+        action: 'create_shipment'
+      })
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Shipment Creation Error:', error);
+    return { error: true, message: 'No se pudo crear la guía en Skydropx.' };
+  }
+};
+
 const getProviderIcon = (provider) => {
   const icons = {
     'estafeta': '📦',

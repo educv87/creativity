@@ -9,14 +9,24 @@ const SuccessPage = () => {
 
   useEffect(() => {
     if (orderId) {
-      // Actualizar estatus de la orden a 'pagado'
-      const updateOrder = async () => {
-        await supabase
-          .from('ordenes')
-          .update({ status: 'pagado' })
-          .eq('id', orderId);
+      // Actualizar estatus de la orden a 'pagado' y crear envío en Skydropx
+      const finalizeOrder = async () => {
+        try {
+          // 1. Marcar como pagado
+          await supabase
+            .from('ordenes')
+            .update({ status: 'pagado' })
+            .eq('id', orderId);
+          
+          // 2. Crear guía preautorizada en Skydropx
+          const { createShipment } = await import('../lib/shipping');
+          await createShipment(orderId);
+          
+        } catch (error) {
+          console.error("Error finalizando orden:", error);
+        }
       };
-      updateOrder();
+      finalizeOrder();
     }
   }, [orderId]);
 
