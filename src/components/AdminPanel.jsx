@@ -1,0 +1,739 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
+import { fetchProjectData, updateStock, updatePrice, addColor, deleteColor, fetchOrders, updateDiscount } from '../lib/data';
+
+const AdminPanel = () => {
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('inventario');
+  const [data, setData] = useState({ cortes: [], colores: [], inventario: [] });
+  const [orders, setOrders] = useState([]);
+  const [newColor, setNewColor] = useState({ nombre: '', hex: '#ffffff', tint_class: 'bg-white' });
+  const [saveStatus, setSaveStatus] = useState({}); // { id: 'success' | 'error' | 'saving' }
+  const [filterCorte, setFilterCorte] = useState('all');
+  const [filterColor, setFilterColor] = useState('all');
+  const [editDraft, setEditDraft] = useState({}); // { id: { stock, price, discount } }
+  const [newCorte, setNewCorte] = useState({ nombre: '', imagen_url: '' });
+  const [selectedColors, setSelectedColors] = useState([]); // Para el nuevo producto
+  const [isUploading, setIsUploading] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+
+
+
+  useEffect(() => {
+    checkSession();
+  }, []);
+
+  const checkSession = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      navigate('/login');
+    } else {
+      loadAllData();
+    }
+  };
+
+  const loadAllData = async () => {
+    const [result, ordersResult] = await Promise.all([
+      fetchProjectData(),
+      fetchOrders()
+    ]);
+    
+    if (result) {
+      setData(result);
+      const initialDraft = {};
+      result.inventario.forEach(item => {
+        initialDraft[item.id] = {
+          stock: item.stock,
+          price: item.precio_unitario,
+          discount: item.descuento_porcentaje || 0
+        };
+      });
+      setEditDraft(initialDraft);
+    }
+    if (ordersResult.data) setOrders(ordersResult.data);
+    setLoading(false);
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate('/login');
+  };
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Math.random()}.${fileExt}`;
+    const filePath = `${fileName}`;
+
+    const { data: uploadData, error } = await supabase.storage
+      .from('productos')
+      .upload(filePath, file);
+
+    if (error) {
+      alert('Error al subir imagen: ' + error.message);
+      setIsUploading(false);
+      return;
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('productos')
+      .getPublicUrl(filePath);
+
+    setNewCorte(prev => ({ ...prev, imagen_url: publicUrl }));
+    setIsUploading(false);
+  };
+
+  const handleCreateProduct = async () => {
+    if (!newCorte.nombre || !newCorte.imagen_url || selectedColors.length === 0) {
+      alert('Por favor completa todos los campos y selecciona al menos un color.');
+      return;
+    }
+
+    setLoading(true);
+    
+    // 1. Crear el Corte
+    const { data: corteData, error: corteError } = await supabase
+      .from('cortes')
+      .insert([newCorte])
+      .select();
+
+    if (corteError) {
+      alert('Error al crear corte: ' + corteError.message);
+      setLoading(false);
+      return;
+    }
+
+    const corteId = corteData[0].id;
+
+    // 2. Vincular Colores
+    const relations = selectedColors.map(colorId => ({
+      corte_id: corteId,
+      color_id: colorId
+    }));
+
+    const { error: relError } = await supabase
+      .from('corte_colores')
+      .insert(relations);
+
+    if (relError) {
+      alert('Error al vincular colores: ' + relError.message);
+      setLoading(false);
+      return;
+    }
+
+    // 3. Generar Inventario (Tallas CH a XXL)
+    const tallas = ['XS', 'CH', 'M', 'G', 'XL', 'XXL'];
+    const inventarioEntries = [];
+    
+    selectedColors.forEach(colorId => {
+      tallas.forEach(talla => {
+        inventarioEntries.push({
+          corte_id: corteId,
+          color_id: colorId,
+          talla: talla,
+          stock: 0,
+          precio_unitario: 70
+        });
+      });
+    });
+
+    const { error: invError } = await supabase
+      .from('inventario')
+      .insert(inventarioEntries);
+
+    if (invError) {
+      alert('Error al generar inventario: ' + invError.message);
+    }
+
+    // Reset y Recargar
+    setNewCorte({ nombre: '', imagen_url: '' });
+    setSelectedColors([]);
+    await loadAllData();
+    setActiveTab('inventario'); // Ir al inventario para poner stock
+  };
+
+  const handleDraftChange = (id, field, value) => {
+    setEditDraft(prev => ({
+      ...prev,
+      [id]: { ...prev[id], [field]: value }
+    }));
+  };
+
+  const [isSavingAll, setIsSavingAll] = useState(false);
+
+  const handleSaveAll = async () => {
+    setIsSavingAll(true);
+    let hasError = false;
+
+    // Find which items actually changed
+    const itemsToUpdate = data.inventario.filter(item => {
+      const draft = editDraft[item.id];
+      if (!draft) return false;
+      return parseInt(draft.stock) !== item.stock ||
+             parseFloat(draft.price) !== item.precio_unitario ||
+             parseInt(draft.discount) !== (item.descuento_porcentaje || 0);
+    });
+
+    if (itemsToUpdate.length === 0) {
+      setIsSavingAll(false);
+      return;
+    }
+
+    for (const item of itemsToUpdate) {
+      const draft = editDraft[item.id];
+      try {
+        const results = await Promise.all([
+          updateStock(item.id, parseInt(draft.stock)),
+          updatePrice(item.id, parseFloat(draft.price)),
+          updateDiscount(item.id, parseInt(draft.discount))
+        ]);
+        if (results.some(r => r.error)) hasError = true;
+      } catch (err) {
+        hasError = true;
+      }
+    }
+
+    if (!hasError) {
+      // Small visual feedback could be nice, but reloading data is safer
+      await loadAllData();
+    } else {
+      alert('Hubo un error al guardar algunos cambios. Revisa tu conexión.');
+    }
+    setIsSavingAll(false);
+  };
+
+  const handleAddColor = async () => {
+    if (!newColor.nombre) return;
+    const { error } = await addColor(newColor);
+    if (!error) {
+      setNewColor({ nombre: '', hex: '#ffffff', tint_class: 'bg-white' });
+      loadAllData();
+    }
+  };
+
+  const handleDeleteColor = async (id) => {
+    if (window.confirm('¿Eliminar este color?')) {
+      const { error } = await deleteColor(id);
+      if (!error) loadAllData();
+    }
+  };
+;
+
+
+  // Filtrado de Inventario
+  const filteredInventario = data.inventario.filter(item => {
+    const matchCorte = filterCorte === 'all' || item.corte_id === filterCorte;
+    const matchColor = filterColor === 'all' || item.color_id === filterColor;
+    return matchCorte && matchColor;
+  });
+
+  if (loading) return (
+    <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-gray-950 text-white font-sans selection:bg-blue-500/30">
+      {/* Sidebar / Header */}
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
+          <div>
+          <div className="flex items-center gap-4">
+            <img src="/CREATIVITY - EA.png" alt="Logo" className="w-12 h-12 invert brightness-200" />
+            <h1 className="text-4xl font-black tracking-tight bg-gradient-to-r from-white to-gray-500 bg-clip-text text-transparent">
+              Admin.
+            </h1>
+          </div>
+            <p className="text-gray-500 mt-2 font-medium">Gestiona tu catálogo e inventario en tiempo real.</p>
+          </div>
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => navigate('/')}
+              className="px-6 py-2.5 rounded-full bg-white/5 border border-white/10 text-sm font-bold hover:bg-white/10 transition-all"
+            >
+              Ver Tienda
+            </button>
+            <button 
+              onClick={handleLogout}
+              className="px-6 py-2.5 rounded-full bg-red-500/10 border border-red-500/20 text-red-500 text-sm font-bold hover:bg-red-500 hover:text-white transition-all"
+            >
+              Cerrar Sesión
+            </button>
+          </div>
+        </div>
+
+
+        {/* Tabs */}
+        <div className="flex gap-2 p-1 bg-white/5 rounded-2xl w-fit mb-8 border border-white/5">
+          {['inventario', 'pedidos', 'colores', 'cortes'].map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-6 py-2 rounded-xl text-sm font-bold capitalize transition-all ${activeTab === tab ? 'bg-white text-black shadow-lg' : 'text-gray-400 hover:text-white'}`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+
+        {/* Content */}
+        <div className="bg-white/5 rounded-3xl border border-white/10 overflow-hidden backdrop-blur-xl shadow-2xl">
+          {activeTab === 'inventario' && (
+            <>
+              {/* Filtros */}
+              <div className="p-6 border-b border-white/10 flex flex-wrap gap-4 bg-white/[0.02] justify-between items-end">
+                <div className="flex flex-wrap gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">Filtrar por Corte</label>
+                    <select 
+                      value={filterCorte}
+                      onChange={(e) => setFilterCorte(e.target.value)}
+                      className="bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm font-bold focus:outline-none focus:border-blue-500 w-48"
+                    >
+                      <option value="all">Todos los cortes</option>
+                      {data.cortes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">Filtrar por Color</label>
+                    <select 
+                      value={filterColor}
+                      onChange={(e) => setFilterColor(e.target.value)}
+                      className="bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm font-bold focus:outline-none focus:border-blue-500 w-48"
+                    >
+                      <option value="all">Todos los colores</option>
+                      {data.colores.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex items-end pb-1">
+                    <span className="text-xs text-gray-500 font-medium">Mostrando {filteredInventario.length} variantes</span>
+                  </div>
+                </div>
+                
+                <button
+                  onClick={handleSaveAll}
+                  disabled={isSavingAll}
+                  className={`px-6 py-3 rounded-xl text-sm font-black uppercase tracking-widest transition-all ${
+                    isSavingAll 
+                      ? 'bg-blue-500 text-white animate-pulse cursor-not-allowed' 
+                      : 'bg-green-500 text-white hover:bg-green-400 hover:shadow-lg hover:-translate-y-0.5'
+                  }`}
+                >
+                  {isSavingAll ? 'Guardando...' : 'Guardar Cambios'}
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-white/10 text-xs font-black uppercase tracking-widest text-gray-500">
+                      <th className="px-8 py-6">Producto / Variante</th>
+                      <th className="px-8 py-6">Talla</th>
+                      <th className="px-8 py-6">Stock</th>
+                      <th className="px-8 py-6">Precio (MXN)</th>
+                      <th className="px-8 py-6">% Desc</th>
+                      <th className="px-8 py-6">Precio Final</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {filteredInventario.map(item => {
+                      const corte = data.cortes.find(c => c.id === item.corte_id);
+                      const color = data.colores.find(c => c.id === item.color_id);
+                      const status = saveStatus[item.id];
+                      const draft = editDraft[item.id] || { stock: item.stock, price: item.precio_unitario, discount: item.descuento_porcentaje || 0 };
+                      
+                      const finalPrice = draft.price * (1 - (draft.discount / 100));
+
+                      return (
+                        <tr key={item.id} className="group hover:bg-white/[0.02] transition-colors">
+                          <td className="px-8 py-4">
+                            <div className="flex items-center gap-4">
+                              <div className="w-8 h-8 rounded-full border border-white/10" style={{ backgroundColor: color?.hex }}></div>
+                              <div>
+                                <div className="font-bold text-sm">{corte?.nombre}</div>
+                                <div className="text-[10px] text-gray-500 font-black uppercase tracking-tighter">{color?.nombre}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-8 py-4 font-mono font-bold text-blue-400">{item.talla}</td>
+                          <td className="px-8 py-4">
+                            <input 
+                              type="number" 
+                              value={draft.stock}
+                              onChange={(e) => handleDraftChange(item.id, 'stock', e.target.value)}
+                              className="bg-black/40 border border-white/5 rounded-lg px-3 py-1.5 w-20 text-xs font-bold focus:outline-none focus:border-blue-500 transition-all"
+                            />
+                          </td>
+                          <td className="px-8 py-4">
+                            <div className="flex items-center gap-1">
+                              <span className="text-gray-500 font-bold text-xs">$</span>
+                              <input 
+                                type="number" 
+                                value={draft.price}
+                                onChange={(e) => handleDraftChange(item.id, 'price', e.target.value)}
+                                className="bg-black/40 border border-white/5 rounded-lg px-3 py-1.5 w-24 text-xs font-bold focus:outline-none focus:border-blue-500 transition-all"
+                              />
+                            </div>
+                          </td>
+                          <td className="px-8 py-4">
+                            <div className="flex items-center gap-1">
+                              <input 
+                                type="number" 
+                                value={draft.discount}
+                                onChange={(e) => handleDraftChange(item.id, 'discount', e.target.value)}
+                                className="bg-black/40 border border-white/5 rounded-lg px-3 py-1.5 w-16 text-xs font-bold focus:outline-none focus:border-orange-500 text-orange-400 transition-all"
+                              />
+                              <span className="text-gray-500 font-bold text-xs">%</span>
+                            </div>
+                          </td>
+                          <td className="px-8 py-4">
+                            <div className="font-black text-sm text-green-400">
+                              ${finalPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {filteredInventario.length === 0 && (
+                      <tr>
+                        <td colSpan="6" className="px-8 py-20 text-center">
+                          <div className="flex flex-col items-center gap-4">
+                            <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center text-gray-600">🔍</div>
+                            <div>
+                              <p className="text-white font-bold">Sin resultados</p>
+                              <p className="text-gray-500 text-sm">Prueba ajustando los filtros de búsqueda.</p>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+
+
+          {activeTab === 'pedidos' && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-white/10 text-xs font-black uppercase tracking-widest text-gray-500">
+                    <th className="px-8 py-6">Fecha / ID</th>
+                    <th className="px-8 py-6">Cliente</th>
+                    <th className="px-8 py-6">Detalles</th>
+                    <th className="px-8 py-6">Total</th>
+                    <th className="px-8 py-6 text-center">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {orders.map(order => (
+                    <tr 
+                      key={order.id} 
+                      onClick={() => setSelectedOrder(order)}
+                      className="group hover:bg-white/[0.05] transition-all cursor-pointer"
+                    >
+                      <td className="px-8 py-6">
+                        <div className="text-xs font-mono text-gray-400">#{order.id.slice(0, 8)}</div>
+                        <div className="text-sm font-bold mt-1">{new Date(order.created_at).toLocaleDateString()}</div>
+                      </td>
+                      <td className="px-8 py-6">
+                        <div className="font-bold text-sm">{order.cliente_nombre}</div>
+                        <div className="text-xs text-gray-500">{order.cliente_email}</div>
+                      </td>
+                      <td className="px-8 py-6">
+                        <div className="flex flex-col gap-1">
+                          {order.items.slice(0, 2).map((item, i) => (
+                            <div key={i} className="text-[10px] text-gray-400">
+                              <span className="font-black text-blue-400">{item.quantity}x</span> {item.category}
+                            </div>
+                          ))}
+                          {order.items.length > 2 && <div className="text-[10px] text-gray-600 font-bold">+{order.items.length - 2} más...</div>}
+                        </div>
+                      </td>
+                      <td className="px-8 py-6 font-black text-lg">
+                        ${parseFloat(order.total).toLocaleString()}
+                      </td>
+                      <td className="px-8 py-6 text-center">
+                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${order.status === 'pagado' ? 'bg-green-500/20 text-green-500' : 'bg-yellow-500/20 text-yellow-500'}`}>
+                          {order.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                  {orders.length === 0 && (
+                    <tr>
+                      <td colSpan="5" className="px-8 py-20 text-center text-gray-500 font-medium italic">
+                        No hay pedidos registrados todavía.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {activeTab === 'colores' && (
+            <div className="p-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {/* Formulario Nuevo Color */}
+                <div className="bg-white/5 rounded-2xl p-6 border border-white/10 flex flex-col gap-4">
+                  <h3 className="text-lg font-bold">Nuevo Color</h3>
+                  <div className="space-y-3">
+                    <input 
+                      type="text" 
+                      placeholder="Nombre del color" 
+                      value={newColor.nombre}
+                      onChange={e => setNewColor({...newColor, nombre: e.target.value})}
+                      className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500"
+                    />
+                    <div className="flex gap-3">
+                      <input 
+                        type="color" 
+                        value={newColor.hex}
+                        onChange={e => setNewColor({...newColor, hex: e.target.value})}
+                        className="h-10 w-20 bg-transparent border-none cursor-pointer"
+                      />
+                      <input 
+                        type="text" 
+                        placeholder="Tailwind class (bg-blue-200)" 
+                        value={newColor.tint_class}
+                        onChange={e => setNewColor({...newColor, tint_class: e.target.value})}
+                        className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+                  <button 
+                    onClick={handleAddColor}
+                    className="w-full bg-white text-black font-bold py-3 rounded-xl hover:bg-gray-200 transition-colors"
+                  >
+                    Agregar Color
+                  </button>
+                </div>
+
+                {/* Lista de Colores */}
+                {data.colores.map(color => (
+                  <div key={color.id} className="bg-white/5 rounded-2xl p-6 border border-white/10 flex items-center justify-between group">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-full border-2 border-white/20 shadow-xl" style={{ backgroundColor: color.hex }}></div>
+                      <div>
+                        <div className="font-bold">{color.nombre}</div>
+                        <div className="text-xs text-gray-500 font-mono uppercase">{color.hex}</div>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => handleDeleteColor(color.id)}
+                      className="p-2 rounded-full bg-red-500/10 text-red-500 opacity-0 group-hover:opacity-100 transition-all hover:bg-red-500 hover:text-white"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'cortes' && (
+            <div className="p-8">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Formulario Nuevo Producto */}
+                <div className="lg:col-span-1 bg-white/5 rounded-3xl p-8 border border-white/10 flex flex-col gap-6 h-fit sticky top-8">
+                  <div>
+                    <h3 className="text-2xl font-black mb-2">Nuevo Producto</h3>
+                    <p className="text-gray-500 text-sm">Crea un nuevo modelo y genera su inventario.</p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Nombre del Modelo</label>
+                      <input 
+                        type="text" 
+                        placeholder="Ej. Sudadera Hoodie" 
+                        value={newCorte.nombre}
+                        onChange={e => setNewCorte({...newCorte, nombre: e.target.value})}
+                        className="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-3 text-sm focus:outline-none focus:border-blue-500 transition-all"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Imagen de Silueta (PNG)</label>
+                      <div className="relative group">
+                        <input 
+                          type="file" 
+                          accept="image/*"
+                          onChange={handleImageUpload}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                        />
+                        <div className={`w-full h-32 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-all ${newCorte.imagen_url ? 'border-green-500/50 bg-green-500/5' : 'border-white/10 group-hover:border-white/20 bg-white/5'}`}>
+                          {isUploading ? (
+                            <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          ) : newCorte.imagen_url ? (
+                            <>
+                              <img src={newCorte.imagen_url} className="h-20 object-contain" />
+                              <span className="text-[10px] font-bold text-green-500">Imagen cargada ✓</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-2xl">📁</span>
+                              <span className="text-[10px] font-bold text-gray-500 uppercase">Subir archivo</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Colores Disponibles</label>
+                      <div className="flex flex-wrap gap-2 p-3 bg-black/20 rounded-2xl border border-white/5 max-h-40 overflow-y-auto">
+                        {data.colores.map(color => (
+                          <button
+                            key={color.id}
+                            onClick={() => {
+                              if (selectedColors.includes(color.id)) {
+                                setSelectedColors(selectedColors.filter(id => id !== color.id));
+                              } else {
+                                setSelectedColors([...selectedColors, color.id]);
+                              }
+                            }}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-bold border transition-all ${
+                              selectedColors.includes(color.id) 
+                                ? 'bg-white text-black border-white' 
+                                : 'bg-white/5 text-gray-400 border-white/10 hover:border-white/30'
+                            }`}
+                          >
+                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color.hex }}></div>
+                            {color.nombre}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={handleCreateProduct}
+                    disabled={loading || isUploading}
+                    className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl hover:bg-blue-500 transition-all shadow-xl shadow-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {loading ? 'Creando...' : 'Crear Producto y Generar Inventario'}
+                  </button>
+                </div>
+
+                {/* Lista de Cortes Existentes */}
+                <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {data.cortes.map(corte => (
+                    <div key={corte.id} className="bg-white/5 rounded-[2rem] p-8 border border-white/10 flex flex-col items-center group hover:bg-white/[0.07] transition-all">
+                      <div className="relative w-48 h-48 mb-6 flex items-center justify-center">
+                        <div className="absolute inset-0 bg-blue-500/20 blur-3xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                        <img src={corte.imagen_url} alt={corte.nombre} className="relative z-10 w-full h-full object-contain grayscale group-hover:grayscale-0 transition-all duration-500" />
+                      </div>
+                      <h3 className="text-xl font-black">{corte.nombre}</h3>
+                      <p className="text-gray-500 text-sm mt-1 uppercase font-black tracking-widest text-[10px]">Modelo Activo</p>
+                      
+                      <div className="mt-6 flex flex-wrap justify-center gap-1">
+                        {data.relations.filter(r => r.corte_id === corte.id).map(r => {
+                          const color = data.colores.find(col => col.id === r.color_id);
+                          return color ? (
+                            <div key={color.id} className="w-3 h-3 rounded-full border border-white/20" style={{ backgroundColor: color.hex }} title={color.nombre}></div>
+                          ) : null;
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+      </div>
+      {/* Modal Detalle de Pedido */}
+      {selectedOrder && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setSelectedOrder(null)}></div>
+          <div className="relative bg-[#1A1A1A] border border-white/10 w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-fade-in-up">
+            <div className="p-8 border-b border-white/5 flex justify-between items-start">
+              <div>
+                <div className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Detalles del Pedido</div>
+                <h3 className="text-2xl font-black">#{selectedOrder.id.slice(0, 8)}</h3>
+              </div>
+              <button onClick={() => setSelectedOrder(null)} className="p-2 hover:bg-white/5 rounded-full transition-colors text-gray-500 hover:text-white">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            <div className="p-8 max-h-[60vh] overflow-y-auto custom-scrollbar">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                <div>
+                  <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3">Cliente</h4>
+                  <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
+                    <div className="font-bold text-lg">{selectedOrder.cliente_nombre}</div>
+                    <div className="text-gray-400 text-sm mt-1">{selectedOrder.cliente_email}</div>
+                    <div className="text-gray-400 text-sm">{selectedOrder.cliente_telefono}</div>
+                  </div>
+                </div>
+                <div>
+                  <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3">Dirección de Envío</h4>
+                  <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
+                    <div className="text-white text-sm font-medium leading-relaxed">{selectedOrder.direccion}</div>
+                    <div className="text-blue-400 font-bold text-xs mt-2 uppercase tracking-tighter">CP: {selectedOrder.codigo_postal}</div>
+                  </div>
+                </div>
+              </div>
+
+              <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3">Artículos</h4>
+              <div className="space-y-3 mb-8">
+                {selectedOrder.items.map((item, i) => (
+                  <div key={i} className="bg-white/5 rounded-2xl p-4 border border-white/5 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-full border border-white/10" style={{ backgroundColor: item.colorHex }}></div>
+                      <div>
+                        <div className="font-bold text-sm">{item.category}</div>
+                        <div className="text-[10px] text-gray-500 uppercase font-black tracking-tighter">{item.color} • Talla {item.size}</div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-black text-white">{item.quantity} pz</div>
+                      <div className="text-[10px] text-gray-500">${item.price.toFixed(2)} c/u</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3">Resumen de Pago</h4>
+              <div className="bg-white/5 rounded-3xl p-6 border border-white/10 space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Subtotal</span>
+                  <span className="font-bold">${(parseFloat(selectedOrder.total) - parseFloat(selectedOrder.envio)).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Envío</span>
+                  <span className="font-bold">${parseFloat(selectedOrder.envio).toLocaleString()}</span>
+                </div>
+                <div className="h-px bg-white/10 my-2"></div>
+                <div className="flex justify-between items-end">
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Pagado</span>
+                  <span className="text-3xl font-black text-green-400">${parseFloat(selectedOrder.total).toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-8 bg-black/20 border-t border-white/5 flex justify-end gap-4">
+              <button className="px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-bold transition-all text-sm">Imprimir Ticket</button>
+              <button className="px-8 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black transition-all text-sm shadow-xl shadow-blue-900/20">Preparar Envío</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default AdminPanel;
