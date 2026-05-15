@@ -122,62 +122,100 @@ const CheckoutPage = () => {
     (activeSize ? i.talla === activeSize : true) // Si no hay talla seleccionada, usa la primera variante que encuentre
   );
 
+  const totalPieces = cart.reduce((acc, item) => acc + Number(item.quantity), 0);
+  const potentialTotal = totalPieces + (Number(quantity) || 0);
+
   const getTieredPrice = (qty) => {
+    const total = Number(qty);
     // Oferta de Lanzamiento: Si el cupón está activo y lleva 50+, dar precio de $69
-    if (isPromoApplied && qty >= 50) return 69;
+    if (isPromoApplied && total >= 50) return 69;
     
-    if (qty >= 101) return 69;
-    if (qty >= 51) return 79;
+    if (total >= 100) return 69;
+    if (total >= 50) return 79;
     return 89;
   };
 
-  const basePrice = getTieredPrice(quantity);
-  const discountPct = 0; 
-  const pricePerUnit = basePrice;
-  const totalPrice = pricePerUnit * quantity;
+  const pricePerUnit = getTieredPrice(potentialTotal);
+  const basePrice = pricePerUnit;
+  const totalPrice = pricePerUnit * (Number(quantity) || 0);
   
-  const hasFreeShipping = isPromoApplied && quantity >= 50;
+  const hasFreeShipping = isPromoApplied && potentialTotal >= 50;
 
   // Calculate real stock
   const totalColorStock = inventory
     .filter(i => i.corte_id === activeCategory && i.color_id === activeColorId)
     .reduce((acc, curr) => acc + curr.stock, 0);
   const displayStock = (activeSize && variant) ? variant.stock : totalColorStock;
+  const alreadyInCartForActive = cart
+    .filter(item => item.inventoryId === variant?.id)
+    .reduce((acc, item) => acc + item.quantity, 0);
 
 
 
   const handleAddToCart = () => {
-    if (!activeSize) {
+    if (!activeSize || !variant) {
       setShowSizeError(true);
       setTimeout(() => setShowSizeError(false), 3000);
       return;
     }
 
-    if (quantity > displayStock) {
-      alert(`Lo sentimos, solo tenemos ${displayStock} piezas disponibles en esta variante.`);
+    // Calcular cuánto ya hay en el carrito de ESTA misma variante
+    const alreadyInCart = cart
+      .filter(item => item.inventoryId === variant.id)
+      .reduce((acc, item) => acc + item.quantity, 0);
+
+    if (quantity + alreadyInCart > variant.stock) {
+      const disponible = variant.stock - alreadyInCart;
+      if (disponible <= 0) {
+        alert(`Ya tienes todas las piezas disponibles (${variant.stock}) de esta talla en tu pedido.`);
+      } else {
+        alert(`Lo sentimos, solo puedes agregar ${disponible} piezas más de esta variante (Stock total: ${variant.stock}).`);
+      }
       return;
     }
     
     setShowSizeError(false);
     
-    const newItem = {
-      id: Date.now().toString() + Math.random(),
-      category: categoryData.name,
-      color: activeColor.name,
-      colorHex: activeColor.hex,
-      size: activeSize,
-      quantity,
-      price: pricePerUnit,
-      originalPrice: basePrice,
-      discount: discountPct
-    };
-    setCart([...cart, newItem]);
+    // Buscar si ya existe el producto exacto en el carrito para combinarlo
+    const existingItemIndex = cart.findIndex(item => 
+      item.inventoryId === variant.id
+    );
+
+    if (existingItemIndex > -1) {
+      const newCart = [...cart];
+      newCart[existingItemIndex].quantity += quantity;
+      setCart(newCart);
+    } else {
+      const newItem = {
+        id: Date.now().toString() + Math.random(),
+        inventoryId: variant.id,
+        category: categoryData.name,
+        color: activeColor.name,
+        colorHex: activeColor.hex,
+        size: activeSize,
+        quantity,
+        originalPrice: 89,
+        discount: 0
+      };
+      setCart([...cart, newItem]);
+    }
+
     setQuantity(1);
     setActiveSize(null);
   };
 
   const updateCartQuantity = (id, newQuantity) => {
     if (newQuantity < 1) return;
+    
+    const item = cart.find(i => i.id === id);
+    if (!item) return;
+
+    const v = inventory.find(inv => inv.id === item.inventoryId);
+    if (v && newQuantity > v.stock) {
+      alert(`Lo sentimos, el stock máximo para esta variante es de ${v.stock} piezas.`);
+      return;
+    }
+
     setCart(cart.map(item => item.id === id ? { ...item, quantity: newQuantity } : item));
   };
 
@@ -185,10 +223,9 @@ const CheckoutPage = () => {
     setCart(cart.filter(item => item.id !== id));
   };
 
-  const totalPieces = cart.reduce((acc, item) => acc + item.quantity, 0);
-  const subtotalCart = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
-  const volumeDiscount = totalPieces >= 50 ? subtotalCart * 0.10 : 0;
-  const finalTotal = subtotalCart - volumeDiscount;
+  const cartTierPrice = getTieredPrice(totalPieces);
+  const subtotalCart = cart.reduce((acc, item) => acc + (cartTierPrice * Number(item.quantity)), 0);
+  const finalTotal = subtotalCart;
 
 
   const handleQuoteShipping = async () => {
@@ -461,9 +498,11 @@ const CheckoutPage = () => {
                   <div className="flex items-center gap-1.5">
                     {activeSize ? (
                       <>
-                        <span className={`w-2 h-2 rounded-full ${displayStock > 0 ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
-                        <span className={displayStock > 0 ? 'text-gray-900 font-bold' : 'text-red-500'}>
-                          {displayStock > 0 ? `${displayStock} piezas disponibles` : 'Agotado en esta talla'}
+                        <span className={`w-2 h-2 rounded-full ${displayStock - alreadyInCartForActive > 0 ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
+                        <span className={displayStock - alreadyInCartForActive > 0 ? 'text-green-600 font-black' : 'text-red-500 font-bold'}>
+                          {displayStock - alreadyInCartForActive > 0 
+                            ? `${displayStock - alreadyInCartForActive} piezas disponibles` 
+                            : (alreadyInCartForActive >= displayStock ? 'Ya agregaste todo el stock' : 'Agotado en esta talla')}
                         </span>
                       </>
                     ) : (
@@ -485,32 +524,32 @@ const CheckoutPage = () => {
           <div className="mb-4">
             <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Escala de Precios</h3>
             <div className="grid grid-cols-3 gap-2">
-              <div className={`p-2 rounded-xl border-2 text-center transition-all duration-300 ${quantity <= 50 ? 'border-gray-900 bg-white shadow-md' : 'border-gray-100 bg-gray-50 opacity-60'}`}>
-                <p className="text-[9px] font-bold text-gray-400 uppercase">1 - 50</p>
-                <p className={`text-lg font-black ${quantity <= 50 ? 'text-gray-900' : 'text-gray-400'}`}>$89</p>
+              <div className={`p-2 rounded-xl border-2 text-center transition-all duration-300 ${potentialTotal < 50 ? 'border-gray-900 bg-white shadow-md' : 'border-gray-100 bg-gray-50 opacity-60'}`}>
+                <p className="text-[9px] font-bold text-gray-400 uppercase">1 - 49</p>
+                <p className={`text-lg font-black ${potentialTotal < 50 ? 'text-gray-900' : 'text-gray-400'}`}>$89</p>
               </div>
-              <div className={`p-2 rounded-xl border-2 text-center transition-all duration-300 ${quantity >= 51 && quantity <= 100 ? 'border-pink-500 bg-white shadow-md' : 'border-gray-100 bg-gray-50 opacity-60'}`}>
-                <p className="text-[9px] font-bold text-gray-400 uppercase">51 - 100</p>
-                <p className={`text-lg font-black ${quantity >= 51 && quantity <= 100 ? 'text-pink-500' : 'text-gray-400'}`}>$79</p>
+              <div className={`p-2 rounded-xl border-2 text-center transition-all duration-300 ${potentialTotal >= 50 && potentialTotal < 100 ? 'border-pink-500 bg-white shadow-md' : 'border-gray-100 bg-gray-50 opacity-60'}`}>
+                <p className="text-[9px] font-bold text-gray-400 uppercase">50 - 99</p>
+                <p className={`text-lg font-black ${potentialTotal >= 50 && potentialTotal < 100 ? 'text-pink-500' : 'text-gray-400'}`}>$79</p>
               </div>
-              <div className={`p-2 rounded-xl border-2 text-center transition-all duration-300 ${quantity >= 101 ? 'border-teal-500 bg-white shadow-md' : 'border-gray-100 bg-gray-50 opacity-60'}`}>
-                <p className="text-[9px] font-bold text-gray-400 uppercase">101+</p>
-                <p className={`text-lg font-black ${quantity >= 101 ? 'text-teal-500' : 'text-gray-400'}`}>$69</p>
+              <div className={`p-2 rounded-xl border-2 text-center transition-all duration-300 ${potentialTotal >= 100 ? 'border-teal-500 bg-white shadow-md' : 'border-gray-100 bg-gray-50 opacity-60'}`}>
+                <p className="text-[9px] font-bold text-gray-400 uppercase">100+</p>
+                <p className={`text-lg font-black ${potentialTotal >= 100 ? 'text-teal-500' : 'text-gray-400'}`}>$69</p>
               </div>
             </div>
             
             {/* Indicador de siguiente nivel */}
-            {quantity < 101 && (
+            {potentialTotal < 100 && (
               <div className="mt-3 bg-white rounded-lg p-2 border border-gray-100 flex items-center justify-between">
                 <p className="text-[10px] font-medium text-gray-500 italic">
-                  {quantity <= 50 
-                    ? `¡Agrega ${51 - quantity} más para bajar a $79!` 
-                    : `¡Agrega ${101 - quantity} más para bajar a $69!`}
+                  {potentialTotal < 50 
+                    ? `¡Agrega ${50 - potentialTotal} más para bajar a $79!` 
+                    : `¡Agrega ${100 - potentialTotal} más para bajar a $69!`}
                 </p>
                 <div className="w-24 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                   <div 
                     className="h-full bg-pink-500 transition-all duration-500" 
-                    style={{ width: `${quantity <= 50 ? (quantity / 50) * 100 : ((quantity - 50) / 50) * 100}%` }}
+                    style={{ width: `${potentialTotal < 50 ? (potentialTotal / 50) * 100 : ((potentialTotal - 50) / 50) * 100}%` }}
                   ></div>
                 </div>
               </div>
@@ -617,7 +656,7 @@ const CheckoutPage = () => {
         <div id="order-summary" className="w-full bg-white border-t border-gray-200 py-12 md:py-20 relative z-20">
           <div className="max-w-7xl mx-auto px-4 md:px-8">
             <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-2">Tu Pedido</h2>
-            <p className="text-gray-500 font-medium mb-8">Obtén 10% de descuento en pedidos mayores a 50 piezas.</p>
+            <p className="text-gray-500 font-medium mb-8">El precio unitario mejora automáticamente al aumentar el volumen total.</p>
             
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse min-w-[600px]">
@@ -660,12 +699,12 @@ const CheckoutPage = () => {
                         </div>
                       </td>
                       <td className="py-4 px-4 text-right font-medium text-gray-600 hidden sm:table-cell">
-                        {item.discount > 0 && (
-                          <span className="block text-[10px] line-through opacity-50">${item.originalPrice.toFixed(2)}</span>
+                        {cartTierPrice < 89 && (
+                          <span className="block text-[10px] line-through opacity-50">$89.00</span>
                         )}
-                        ${item.price.toFixed(2)}
+                        ${cartTierPrice.toFixed(2)}
                       </td>
-                      <td className="py-4 px-4 text-right font-black text-gray-900">${(item.price * item.quantity).toFixed(2)}</td>
+                      <td className="py-4 px-4 text-right font-black text-gray-900">${(cartTierPrice * item.quantity).toFixed(2)}</td>
                       <td className="py-4 px-4 text-center">
                         <button onClick={() => removeFromCart(item.id)} className="text-gray-300 hover:text-red-500 transition-colors p-2 rounded-full hover:bg-red-50" title="Eliminar fila">
                           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
@@ -688,12 +727,6 @@ const CheckoutPage = () => {
                   <span>Subtotal:</span>
                   <span className="text-gray-900 font-bold">${subtotalCart.toLocaleString()}</span>
                 </div>
-                {volumeDiscount > 0 && (
-                  <div className="flex justify-between lg:justify-end gap-4 text-green-500 font-medium mb-2 bg-green-50 px-3 py-1 rounded-lg">
-                    <span>Descuento Volumen (10%):</span>
-                    <span className="font-bold">-${volumeDiscount.toLocaleString()}</span>
-                  </div>
-                )}
                 <div className="w-full h-px bg-gray-200 my-4"></div>
                 <div className="flex justify-between lg:justify-end items-end gap-8">
                   <div className="text-sm font-bold text-gray-400 uppercase tracking-widest pb-1">Total Final</div>
