@@ -83,6 +83,52 @@ const CheckoutPage = () => {
     loadData();
   }, []);
 
+  useEffect(() => {
+    const fetchZipInfo = async () => {
+      if (customer.cp && customer.cp.trim().length === 5) {
+        setIsFetchingZip(true);
+        setDebugMsg('Buscando información del Código Postal...');
+        try {
+          const res = await fetch(`https://api.zippopotam.us/mx/${customer.cp}`);
+          if (res.ok) {
+            const data = await res.json();
+            const places = data.places || [];
+            if (places.length > 0) {
+              const state = places[0].state || '';
+              const placeNames = places.map(p => p['place name']);
+              
+              setColoniasDisponibles(placeNames);
+              setCustomer(prev => ({
+                ...prev,
+                estado: state,
+                colonia: placeNames.length === 1 ? placeNames[0] : ''
+              }));
+              setDebugMsg('Código Postal encontrado. Selecciona tu colonia.');
+            } else {
+              setColoniasDisponibles([]);
+              setDebugMsg('El Código Postal no devolvió colonias.');
+            }
+          } else {
+            setColoniasDisponibles([]);
+            setDebugMsg(''); // Si no se encuentra, dejamos que el usuario lo llene manualmente
+          }
+        } catch (error) {
+          console.error(error);
+          setColoniasDisponibles([]);
+          setDebugMsg('');
+        } finally {
+          setIsFetchingZip(false);
+        }
+      } else {
+        setColoniasDisponibles([]);
+      }
+    };
+    
+    if (!isQuoting) {
+      fetchZipInfo();
+    }
+  }, [customer.cp, isQuoting]);
+
   if (loading || !activeCategory) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -231,52 +277,6 @@ const CheckoutPage = () => {
   const cartTierPrice = getTieredPrice(totalPieces);
   const subtotalCart = cart.reduce((acc, item) => acc + (cartTierPrice * Number(item.quantity)), 0);
   const finalTotal = subtotalCart;
-
-  useEffect(() => {
-    const fetchZipInfo = async () => {
-      if (customer.cp && customer.cp.trim().length === 5) {
-        setIsFetchingZip(true);
-        setDebugMsg('Buscando información del Código Postal...');
-        try {
-          const res = await fetch(`https://api.zippopotam.us/mx/${customer.cp}`);
-          if (res.ok) {
-            const data = await res.json();
-            const places = data.places || [];
-            if (places.length > 0) {
-              const state = places[0].state || '';
-              const placeNames = places.map(p => p['place name']);
-              
-              setColoniasDisponibles(placeNames);
-              setCustomer(prev => ({
-                ...prev,
-                estado: state,
-                colonia: placeNames.length === 1 ? placeNames[0] : ''
-              }));
-              setDebugMsg('Código Postal encontrado. Selecciona tu colonia.');
-            } else {
-              setColoniasDisponibles([]);
-              setDebugMsg('El Código Postal no devolvió colonias.');
-            }
-          } else {
-            setColoniasDisponibles([]);
-            setDebugMsg(''); // Si no se encuentra, dejamos que el usuario lo llene manualmente
-          }
-        } catch (error) {
-          console.error(error);
-          setColoniasDisponibles([]);
-          setDebugMsg('');
-        } finally {
-          setIsFetchingZip(false);
-        }
-      } else {
-        setColoniasDisponibles([]);
-      }
-    };
-    
-    if (!isQuoting) {
-      fetchZipInfo();
-    }
-  }, [customer.cp]);
 
   const handleCpChange = (e) => {
     const val = e.target.value.replace(/[^0-9]/g, '').slice(0, 5);
