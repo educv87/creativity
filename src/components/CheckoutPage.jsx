@@ -300,6 +300,10 @@ const CheckoutPage = () => {
       setDebugMsg('Error: La Calle y Número son obligatorios.');
       return;
     }
+    if (!customer.colonia) {
+      setDebugMsg('Error: Por favor selecciona tu Colonia.');
+      return;
+    }
     if (!customer.email || !customer.email.includes('@')) {
       setDebugMsg('Error: Ingresa un Correo Electrónico válido.');
       return;
