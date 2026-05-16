@@ -864,13 +864,21 @@ const CheckoutPage = () => {
                   </div>
                 </div>
 
-                <div className="mt-8 pt-6 border-t border-gray-100 flex justify-end">
+                <div 
+                  className="mt-8 pt-6 border-t border-gray-100 flex justify-end"
+                  onClick={() => alert('DEBUG: Wrapper click detectado')}
+                >
                   {!shippingOptions ? (
                       <button 
                         type="button"
-                        onClick={handleQuoteShipping}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('DEBUG: Button click detectado');
+                          handleQuoteShipping();
+                        }}
                         disabled={isQuoting}
-                        className="w-full md:w-auto bg-blue-600 text-white px-10 py-4 rounded-xl font-black text-lg hover:bg-blue-500 hover:-translate-y-1 transition-all duration-300 shadow-[0_15px_30px_rgba(37,99,235,0.3)] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none relative z-50"
+                        className="w-full md:w-auto bg-blue-600 text-white px-10 py-4 rounded-xl font-black text-lg hover:bg-blue-500 hover:-translate-y-1 transition-all duration-300 shadow-[0_15px_30px_rgba(37,99,235,0.3)] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none relative z-50 cursor-pointer"
+                        style={{ pointerEvents: 'auto' }}
                       >
                         {isQuoting ? (
                           <>
