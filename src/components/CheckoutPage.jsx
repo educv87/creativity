@@ -34,6 +34,8 @@ const CheckoutPage = () => {
     cp: ''
   });
   const [debugMsg, setDebugMsg] = useState('');
+  const [coloniasDisponibles, setColoniasDisponibles] = useState([]);
+  const [isFetchingZip, setIsFetchingZip] = useState(false);
 
 
 
@@ -229,6 +231,57 @@ const CheckoutPage = () => {
   const cartTierPrice = getTieredPrice(totalPieces);
   const subtotalCart = cart.reduce((acc, item) => acc + (cartTierPrice * Number(item.quantity)), 0);
   const finalTotal = subtotalCart;
+
+  useEffect(() => {
+    const fetchZipInfo = async () => {
+      if (customer.cp && customer.cp.trim().length === 5) {
+        setIsFetchingZip(true);
+        setDebugMsg('Buscando información del Código Postal...');
+        try {
+          const res = await fetch(`https://api.zippopotam.us/mx/${customer.cp}`);
+          if (res.ok) {
+            const data = await res.json();
+            const places = data.places || [];
+            if (places.length > 0) {
+              const state = places[0].state || '';
+              const placeNames = places.map(p => p['place name']);
+              
+              setColoniasDisponibles(placeNames);
+              setCustomer(prev => ({
+                ...prev,
+                estado: state,
+                colonia: placeNames.length === 1 ? placeNames[0] : ''
+              }));
+              setDebugMsg('Código Postal encontrado. Selecciona tu colonia.');
+            } else {
+              setColoniasDisponibles([]);
+              setDebugMsg('El Código Postal no devolvió colonias.');
+            }
+          } else {
+            setColoniasDisponibles([]);
+            setDebugMsg(''); // Si no se encuentra, dejamos que el usuario lo llene manualmente
+          }
+        } catch (error) {
+          console.error(error);
+          setColoniasDisponibles([]);
+          setDebugMsg('');
+        } finally {
+          setIsFetchingZip(false);
+        }
+      } else {
+        setColoniasDisponibles([]);
+      }
+    };
+    
+    if (!isQuoting) {
+      fetchZipInfo();
+    }
+  }, [customer.cp]);
+
+  const handleCpChange = (e) => {
+    const val = e.target.value.replace(/[^0-9]/g, '').slice(0, 5);
+    setCustomer(prev => ({ ...prev, cp: val, colonia: '', estado: '', ciudad: '' }));
+  };
 
 
   const handleQuoteShipping = async () => {
@@ -817,10 +870,12 @@ const CheckoutPage = () => {
                     <input 
                       type="text" 
                       value={customer.cp}
-                      onChange={(e) => setCustomer({...customer, cp: e.target.value})}
+                      onChange={handleCpChange}
                       className="w-full bg-gray-50 border-2 border-blue-100 rounded-xl px-4 py-3 font-black text-gray-900 focus:outline-none focus:border-blue-500 focus:bg-white transition-colors" 
                       placeholder="Ej. 76000" 
+                      maxLength="5"
                     />
+                    {isFetchingZip && <p className="text-xs text-blue-500 font-bold">Buscando CP...</p>}
                   </div>
                   <div className="space-y-2 md:col-span-2">
                     <label className="text-xs font-bold tracking-widest text-gray-400 uppercase">Calle y Número</label>
@@ -834,13 +889,26 @@ const CheckoutPage = () => {
                   </div>
                   <div className="space-y-2">
                     <label className="text-xs font-bold tracking-widest text-gray-400 uppercase">Colonia</label>
-                    <input 
-                      type="text" 
-                      value={customer.colonia}
-                      onChange={(e) => setCustomer({...customer, colonia: e.target.value})}
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 font-medium text-gray-900 focus:outline-none focus:border-blue-500 focus:bg-white transition-colors" 
-                      placeholder="Ej. Centro" 
-                    />
+                    {coloniasDisponibles.length > 0 ? (
+                      <select
+                        value={customer.colonia}
+                        onChange={(e) => setCustomer({...customer, colonia: e.target.value})}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 font-medium text-gray-900 focus:outline-none focus:border-blue-500 focus:bg-white transition-colors appearance-none"
+                      >
+                        <option value="">Selecciona tu colonia</option>
+                        {coloniasDisponibles.map((col, idx) => (
+                          <option key={idx} value={col}>{col}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input 
+                        type="text" 
+                        value={customer.colonia}
+                        onChange={(e) => setCustomer({...customer, colonia: e.target.value})}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 font-medium text-gray-900 focus:outline-none focus:border-blue-500 focus:bg-white transition-colors" 
+                        placeholder="Ej. Centro" 
+                      />
+                    )}
                   </div>
                   <div className="space-y-2">
                     <label className="text-xs font-bold tracking-widest text-gray-400 uppercase">Ciudad</label>
