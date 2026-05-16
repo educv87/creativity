@@ -243,7 +243,7 @@ const CheckoutPage = () => {
       setDebugMsg('Error: El Nombre Completo es obligatorio.');
       return;
     }
-    if (!customer.direccion || customer.direccion.trim().length < 5) {
+    if (!customer.calle_numero || customer.calle_numero.trim().length < 5) {
       setDebugMsg('Error: La Calle y Número son obligatorios.');
       return;
     }
