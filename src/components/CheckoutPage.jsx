@@ -477,8 +477,10 @@ const CheckoutPage = () => {
                   onBlur={() => {
                     if (quantity === '' || quantity < 1) setQuantity(1);
                   }}
-                  className="w-12 text-center font-bold text-gray-900 border-x-2 border-gray-100 py-2 focus:outline-none focus:bg-gray-50 text-sm"
+                  className="w-16 text-center font-bold text-gray-900 border-x-2 border-gray-100 py-2 focus:outline-none focus:bg-gray-50 text-sm cursor-text"
                   min="1"
+                  pattern="[0-9]*"
+                  inputMode="numeric"
                 />
                 <button 
                   className="px-3 py-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900 font-black text-base transition-colors"
@@ -692,7 +694,10 @@ const CheckoutPage = () => {
                                 const val = e.target.value === '' ? 1 : parseInt(e.target.value);
                                 updateCartQuantity(item.id, isNaN(val) ? 1 : val);
                               }}
-                              className="w-10 md:w-12 text-center font-bold text-gray-900 border-x border-gray-100 py-1 focus:outline-none focus:bg-gray-50" 
+                              className="w-14 md:w-16 text-center font-bold text-gray-900 border-x border-gray-100 py-1 focus:outline-none focus:bg-gray-50 cursor-text"
+                              min="1"
+                              pattern="[0-9]*"
+                              inputMode="numeric"
                             />
                             <button className="px-2 md:px-3 py-1 text-gray-500 hover:bg-gray-100 hover:text-gray-900 font-bold" onClick={() => updateCartQuantity(item.id, item.quantity + 1)}>+</button>
                           </div>
