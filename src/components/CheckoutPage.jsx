@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchProjectData } from '../lib/data';
 import { getShippingQuotes } from '../lib/shipping';
+import { processOrderAndPayment } from '../lib/payments';
 
 
 const CheckoutPage = () => {
@@ -360,9 +361,11 @@ const CheckoutPage = () => {
       total: finalTotal + (selectedShipping ? selectedShipping.price : 0)
     };
 
-    import('../lib/payments').then(module => {
-      module.processOrderAndPayment(orderData);
-    });
+    try {
+      await processOrderAndPayment(orderData);
+    } catch (err) {
+      alert("Hubo un error al iniciar el pago: " + err.message);
+    }
   };
 
 
