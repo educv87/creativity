@@ -33,6 +33,8 @@ const CheckoutPage = () => {
     estado: '',
     cp: ''
   });
+  const [debugMsg, setDebugMsg] = useState('');
+
 
 
 
@@ -230,36 +232,36 @@ const CheckoutPage = () => {
 
 
   const handleQuoteShipping = async () => {
-    alert('DEBUG: Función handleQuoteShipping iniciada');
+    setDebugMsg('Iniciando handleQuoteShipping...');
     if (!customer.cp || customer.cp.length < 5) {
-      alert('Por favor ingresa un Código Postal válido.');
+      setDebugMsg('Error: Código Postal inválido.');
       return;
     }
 
     if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
-      alert('Error de configuración: Faltan las variables de entorno de Supabase en Vercel.');
+      setDebugMsg('Error crítico: Faltan credenciales de Supabase en Vercel.');
       return;
     }
 
     setIsQuoting(true);
+    setDebugMsg('Llamando a Skydropx...');
     
     try {
-      console.log('Iniciando cotización para CP:', customer.cp, 'con piezas:', totalPieces);
       const result = await getShippingQuotes(customer.cp, totalPieces);
-      console.log('Resultado de cotización:', result);
+      setDebugMsg(`Resultado recibido. Success: ${result.success}`);
 
       if (result.success) {
         if (result.options && result.options.length > 0) {
           setShippingOptions(result.options);
+          setDebugMsg(''); // Limpiar si es exitoso
         } else {
-          alert('No se encontraron paqueterías disponibles para este Código Postal. Intenta con otro.');
+          setDebugMsg('Alerta: No se encontraron paqueterías para este CP.');
         }
       } else {
-        alert('Error en Skydropx: ' + (result.message || 'No se pudieron obtener tarifas. Revisa tu token o el CP.'));
+        setDebugMsg(`Error del servidor: ${result.message}`);
       }
     } catch (err) {
-      console.error('Crash en handleQuoteShipping:', err);
-      alert('Ocurrió un error inesperado al calcular el envío. Por favor intenta de nuevo.');
+      setDebugMsg(`Crash detectado: ${err.message}`);
     } finally {
       setIsQuoting(false);
     }
@@ -865,15 +867,19 @@ const CheckoutPage = () => {
                 </div>
 
                 <div 
-                  className="mt-8 pt-6 border-t border-gray-100 flex justify-end"
-                  onClick={() => alert('DEBUG: Wrapper click detectado')}
+                  className="mt-8 pt-6 border-t border-gray-100 flex flex-col justify-end items-end gap-4"
                 >
+                  {debugMsg && (
+                    <div className="w-full bg-yellow-100 text-yellow-800 p-4 rounded-xl font-bold border border-yellow-300">
+                      Estado del sistema: {debugMsg}
+                    </div>
+                  )}
                   {!shippingOptions ? (
                       <button 
                         type="button"
                         onClick={(e) => {
+                          e.preventDefault();
                           e.stopPropagation();
-                          alert('DEBUG: Button click detectado');
                           handleQuoteShipping();
                         }}
                         disabled={isQuoting}
