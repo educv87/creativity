@@ -230,6 +230,7 @@ const CheckoutPage = () => {
 
 
   const handleQuoteShipping = async () => {
+    alert('DEBUG: Función handleQuoteShipping iniciada');
     if (!customer.cp || customer.cp.length < 5) {
       alert('Por favor ingresa un Código Postal válido.');
       return;
@@ -865,23 +866,24 @@ const CheckoutPage = () => {
 
                 <div className="mt-8 pt-6 border-t border-gray-100 flex justify-end">
                   {!shippingOptions ? (
-                    <button 
-                      onClick={handleQuoteShipping}
-                      disabled={isQuoting}
-                      className="w-full md:w-auto bg-blue-600 text-white px-10 py-4 rounded-xl font-black text-lg hover:bg-blue-500 hover:-translate-y-1 transition-all duration-300 shadow-[0_15px_30px_rgba(37,99,235,0.3)] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none"
-                    >
-                      {isQuoting ? (
-                        <>
-                          <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                          Calculando...
-                        </>
-                      ) : (
-                        <>
-                          Generar Cotización
-                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
-                        </>
-                      )}
-                    </button>
+                      <button 
+                        type="button"
+                        onClick={handleQuoteShipping}
+                        disabled={isQuoting}
+                        className="w-full md:w-auto bg-blue-600 text-white px-10 py-4 rounded-xl font-black text-lg hover:bg-blue-500 hover:-translate-y-1 transition-all duration-300 shadow-[0_15px_30px_rgba(37,99,235,0.3)] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none relative z-50"
+                      >
+                        {isQuoting ? (
+                          <>
+                            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                            Calculando...
+                          </>
+                        ) : (
+                          <>
+                            Generar Cotización Ahora
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
+                          </>
+                        )}
+                      </button>
                   ) : (
                     <div className="w-full animate-fade-in-up">
                       <h4 className="text-xl font-black text-gray-900 mb-4">Selecciona tu Paquetería</h4>
