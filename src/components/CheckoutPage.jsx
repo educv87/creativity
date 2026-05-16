@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchProjectData } from '../lib/data';
+import { getShippingQuotes } from '../lib/shipping';
 
 
 const CheckoutPage = () => {
@@ -233,18 +234,34 @@ const CheckoutPage = () => {
       alert('Por favor ingresa un Código Postal válido.');
       return;
     }
+
+    if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
+      alert('Error de configuración: Faltan las variables de entorno de Supabase en Vercel.');
+      return;
+    }
+
     setIsQuoting(true);
     
-    const { getShippingQuotes } = await import('../lib/shipping');
-    const result = await getShippingQuotes(customer.cp, totalPieces);
+    try {
+      console.log('Iniciando cotización para CP:', customer.cp, 'con piezas:', totalPieces);
+      const result = await getShippingQuotes(customer.cp, totalPieces);
+      console.log('Resultado de cotización:', result);
 
-    if (result.success) {
-      setShippingOptions(result.options);
-    } else {
-      alert('Error en Skydropx: ' + (result.message || 'No se pudieron obtener tarifas. Revisa tu token o el CP.'));
+      if (result.success) {
+        if (result.options && result.options.length > 0) {
+          setShippingOptions(result.options);
+        } else {
+          alert('No se encontraron paqueterías disponibles para este Código Postal. Intenta con otro.');
+        }
+      } else {
+        alert('Error en Skydropx: ' + (result.message || 'No se pudieron obtener tarifas. Revisa tu token o el CP.'));
+      }
+    } catch (err) {
+      console.error('Crash en handleQuoteShipping:', err);
+      alert('Ocurrió un error inesperado al calcular el envío. Por favor intenta de nuevo.');
+    } finally {
+      setIsQuoting(false);
     }
-    
-    setIsQuoting(false);
   };
 
 

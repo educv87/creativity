@@ -7,6 +7,10 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
  * @param {number} totalItems Cantidad de prendas
  */
 export const getShippingQuotes = async (destinationZip, totalItems) => {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return { success: false, message: 'Faltan credenciales de Supabase.' };
+  }
+
   try {
     const response = await fetch(`${SUPABASE_URL}/functions/v1/shipping-quotes`, {
       method: 'POST',
@@ -23,7 +27,11 @@ export const getShippingQuotes = async (destinationZip, totalItems) => {
     const data = await response.json();
 
     if (!response.ok) {
-      return { error: true, message: data.error || 'Error al cotizar' };
+      return { success: false, message: data.error || 'Error al cotizar' };
+    }
+
+    if (!Array.isArray(data)) {
+      return { success: false, message: 'La respuesta de envío no es válida.' };
     }
 
     // Adaptar el formato de Skydropx al de nuestra App
@@ -39,7 +47,7 @@ export const getShippingQuotes = async (destinationZip, totalItems) => {
     };
   } catch (error) {
     console.error('Edge Function Error:', error);
-    return { error: true, message: 'El servidor de envíos aún no está desplegado o configurado.' };
+    return { success: false, message: 'El servidor de envíos aún no está desplegado o configurado.' };
   }
 };
 
