@@ -27,27 +27,58 @@ export const getShippingQuotes = async (destinationZip, totalItems) => {
     const data = await response.json();
 
     if (!response.ok) {
-      return { success: false, message: data.error || 'Error al cotizar' };
+      console.error('API Error Response:', data);
+      let errorMsg = 'Error al cotizar';
+      
+      if (typeof data.error === 'string' && data.error.includes('{')) {
+        try {
+          const parsed = JSON.parse(data.error);
+          if (parsed.errors && parsed.errors.address_to) {
+            errorMsg = 'El código postal ingresado no es válido o no existe.';
+          } else {
+            errorMsg = parsed.message || data.error;
+          }
+        } catch (e) {
+          errorMsg = data.error;
+        }
+      } else {
+        errorMsg = data.error || data.message || errorMsg;
+      }
+      
+      return { success: false, message: errorMsg };
     }
 
+    // Extraer rates robustamente
+    let rates = data;
     if (!Array.isArray(data)) {
+      if (data.rates) rates = data.rates;
+      else if (data.data?.attributes?.rates) rates = data.data.attributes.rates;
+      else if (data.data && Array.isArray(data.data)) rates = data.data.map(r => ({ id: r.id, ...r.attributes }));
+    }
+
+    if (!Array.isArray(rates)) {
+      console.error('Invalid rates format received:', data);
       return { success: false, message: 'La respuesta de envío no es válida.' };
+    }
+
+    if (rates.length === 0) {
+       return { success: true, options: [] }; // Se maneja en el frontend como "No se encontraron paqueterías"
     }
 
     // Adaptar el formato de Skydropx al de nuestra App
     return {
       success: true,
-      options: data.map(opt => ({
+      options: rates.map(opt => ({
         id: opt.id,
-        name: opt.service_level_name || opt.provider,
-        time: `${opt.days} días hábiles`,
-        price: parseFloat(opt.total_pricing),
-        logo: getProviderIcon(opt.provider)
+        name: opt.provider_display_name || opt.provider_name || 'Paquetería',
+        time: opt.days ? `${opt.days} días hábiles` : 'Estándar',
+        price: parseFloat(opt.total || opt.amount || 0),
+        logo: getProviderIcon(opt.provider_name)
       }))
     };
   } catch (error) {
     console.error('Edge Function Error:', error);
-    return { success: false, message: 'El servidor de envíos aún no está desplegado o configurado.' };
+    return { success: false, message: 'El servidor de envíos no respondió correctamente.' };
   }
 };
 

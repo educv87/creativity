@@ -232,9 +232,27 @@ const CheckoutPage = () => {
 
 
   const handleQuoteShipping = async () => {
-    setDebugMsg('Iniciando handleQuoteShipping...');
-    if (!customer.cp || customer.cp.length < 5) {
-      setDebugMsg('Error: Código Postal inválido.');
+    setDebugMsg('Validando datos...');
+    
+    // Validación Rigurosa
+    if (!customer.cp || customer.cp.trim().length !== 5) {
+      setDebugMsg('Error: El Código Postal debe tener exactamente 5 dígitos.');
+      return;
+    }
+    if (!customer.nombre || customer.nombre.trim().length < 3) {
+      setDebugMsg('Error: El Nombre Completo es obligatorio.');
+      return;
+    }
+    if (!customer.direccion || customer.direccion.trim().length < 5) {
+      setDebugMsg('Error: La Calle y Número son obligatorios.');
+      return;
+    }
+    if (!customer.email || !customer.email.includes('@')) {
+      setDebugMsg('Error: Ingresa un Correo Electrónico válido.');
+      return;
+    }
+    if (!customer.telefono || customer.telefono.trim().length < 10) {
+      setDebugMsg('Error: Ingresa un Teléfono válido a 10 dígitos.');
       return;
     }
 
@@ -244,11 +262,11 @@ const CheckoutPage = () => {
     }
 
     setIsQuoting(true);
-    setDebugMsg('Llamando a Skydropx...');
+    setDebugMsg('Enviando paquete de datos estructurados a Skydropx...');
     
     try {
       const result = await getShippingQuotes(customer.cp, totalPieces);
-      setDebugMsg(`Resultado recibido. Success: ${result.success}`);
+      setDebugMsg(`Respuesta de Servidor: ${result.success ? 'Exitosa' : 'Fallida'}`);
 
       if (result.success) {
         if (result.options && result.options.length > 0) {
