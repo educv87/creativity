@@ -164,11 +164,24 @@ const CheckoutPage = () => {
     medidasImg = '/tallas_infantil.jpg';
   }
 
+  const isNegro = activeColor?.name.toLowerCase() === 'negro';
   const galleryImages = [
     { id: 'tshirt', name: 'Vista General', icon: '👕' },
     { id: 'video', name: 'Video Real', icon: '▶️', isVideo: true, videoId: 'TF5nBZMDSMw' },
-    { id: 'costura', name: 'Alta Costura', image: '/attr_costura.jpg', icon: '🪡', needsTint: true },
-    { id: 'suavidad', name: 'Suavidad', image: '/attr_suavidad.jpg', icon: '🍑', needsTint: true },
+    { 
+      id: 'costura', 
+      name: 'Alta Costura', 
+      image: isNegro ? '/attr_costura_negro.png' : '/attr_costura.jpg', 
+      icon: '🪡', 
+      needsTint: !isNegro 
+    },
+    { 
+      id: 'suavidad', 
+      name: 'Suavidad', 
+      image: isNegro ? '/attr_suavidad_negro.png' : '/attr_suavidad.jpg', 
+      icon: '🍑', 
+      needsTint: !isNegro 
+    },
     { id: 'medidas', name: 'Tabla de Medidas', image: medidasImg, icon: '📏' },
   ];
 
