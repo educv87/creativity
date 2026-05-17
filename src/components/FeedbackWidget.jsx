@@ -180,7 +180,7 @@ const FeedbackWidget = () => {
                       required
                       value={comment}
                       onChange={(e) => setComment(e.target.value)}
-                      placeholder="Sudaderas, playeras, tazas, gorras, termos"
+                      placeholder="Sudaderas, playeras, tazas, gorras, termos, etc."
                       className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-800 focus:outline-none focus:border-purple-500 transition-all font-medium min-h-[90px] text-xs resize-none"
                     />
                   </div>
