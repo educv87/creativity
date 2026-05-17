@@ -6,6 +6,8 @@ const AnalyticsDashboard = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState([]);
+  const [peticiones, setPeticiones] = useState([]);
+  const [selectedImage, setSelectedImage] = useState(null);
   const [stats, setStats] = useState({
     totalVisits: 0,
     totalSessions: 0,
@@ -30,15 +32,20 @@ const AnalyticsDashboard = () => {
 
     const fetchAnalytics = async () => {
       try {
-        const { data, error } = await supabase
-          .from('eventos_analitica')
-          .select('*')
-          .order('created_at', { ascending: false });
+        const [eventsRes, peticionesRes] = await Promise.all([
+          supabase.from('eventos_analitica').select('*').order('created_at', { ascending: false }),
+          supabase.from('peticiones_productos').select('*').order('created_at', { ascending: false })
+        ]);
 
-        if (error) throw error;
-        if (data) {
-          setEvents(data);
-          calculateStats(data);
+        if (eventsRes.error) throw eventsRes.error;
+        if (peticionesRes.error) throw peticionesRes.error;
+
+        if (eventsRes.data) {
+          setEvents(eventsRes.data);
+          calculateStats(eventsRes.data);
+        }
+        if (peticionesRes.data) {
+          setPeticiones(peticionesRes.data);
         }
       } catch (err) {
         console.error('Error fetching analytics:', err.message);
@@ -426,7 +433,126 @@ const AnalyticsDashboard = () => {
 
         </div>
 
+        {/* Fila 4: Peticiones Especiales de Clientes */}
+        <div className="bg-white border border-gray-250/80 p-6 md:p-8 rounded-[2rem] shadow-sm">
+          <h3 className="text-xl font-black text-gray-900 mb-2 flex items-center gap-2">
+            <span>📥</span> Peticiones Especiales (B2B Lead Collector)
+          </h3>
+          <p className="text-xs text-gray-400 mb-8">
+            Prendas, cortes o colores especiales solicitados por clientes potenciales. Revisa con tus proveedores y arma una propuesta a su medida.
+          </p>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-gray-200 text-[10px] font-black uppercase tracking-wider text-gray-450 pb-4">
+                  <th className="px-6 py-4">Fecha</th>
+                  <th className="px-6 py-4">Cliente (Contacto)</th>
+                  <th className="px-6 py-4">Prenda / Comentario Solicitado</th>
+                  <th className="px-6 py-4 text-center">Foto de Referencia</th>
+                  <th className="px-6 py-4 text-center">Tipo de Petición</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {peticiones.map((p) => (
+                  <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="px-6 py-4 text-gray-500 font-medium">
+                      {new Date(p.created_at).toLocaleDateString(undefined, {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </td>
+                    <td className="px-6 py-4">
+                      {p.quieres_propuesta ? (
+                        <div className="space-y-1">
+                          <div className="font-bold text-gray-800">{p.nombre}</div>
+                          <div className="font-mono text-purple-650 font-bold bg-purple-50 px-2 py-0.5 rounded w-fit border border-purple-100">
+                            🟢 {p.whatsapp}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 italic">Solo sugerencia (Anónimo)</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-gray-700 font-medium max-w-sm whitespace-pre-wrap leading-relaxed">
+                      {p.comentario}
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      {p.imagen_url ? (
+                        <div className="flex justify-center">
+                          <img
+                            src={p.imagen_url}
+                            alt="Referencia"
+                            onClick={() => setSelectedImage(p.imagen_url)}
+                            className="w-12 h-12 object-cover rounded-xl border border-gray-200 cursor-pointer hover:scale-110 active:scale-95 transition-all shadow-sm hover:shadow-md"
+                          />
+                        </div>
+                      ) : (
+                        <span className="text-gray-300 font-medium">Sin foto</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                        p.quieres_propuesta 
+                          ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' 
+                          : 'bg-gray-100 border border-gray-200 text-gray-500'
+                      }`}>
+                        {p.quieres_propuesta ? 'Solicita Propuesta' : 'Sugerencia de Catálogo'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+
+                {peticiones.length === 0 && (
+                  <tr>
+                    <td colSpan="5" className="px-6 py-16 text-center">
+                      <div className="flex flex-col items-center gap-3">
+                        <span className="text-3xl">📥</span>
+                        <div>
+                          <p className="text-gray-900 font-black text-sm">Sin peticiones aún</p>
+                          <p className="text-gray-400 text-xs mt-1">
+                            Las prendas o colores especiales que tus clientes no encuentren se recopilarán en esta sección.
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
       </div>
+
+      {/* Lightbox / Visor de Imagen Flotante */}
+      {selectedImage && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div 
+            className="absolute inset-0 bg-black/85 backdrop-blur-sm" 
+            onClick={() => setSelectedImage(null)}
+          ></div>
+          <div className="relative max-w-3xl w-full max-h-[85vh] flex flex-col items-center animate-fade-in-up">
+            <button 
+              onClick={() => setSelectedImage(null)}
+              className="absolute -top-12 right-0 p-2 bg-white/10 hover:bg-white/20 text-white rounded-full transition-all border border-white/10 focus:outline-none"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <img 
+              src={selectedImage} 
+              alt="Ampliada" 
+              className="max-w-full max-h-[75vh] object-contain rounded-2xl shadow-2xl border border-white/10"
+            />
+            <span className="text-white/60 font-bold text-xs mt-4 uppercase tracking-widest">Foto de Referencia del Cliente</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
