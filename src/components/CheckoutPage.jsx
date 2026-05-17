@@ -354,7 +354,10 @@ const CheckoutPage = () => {
     const orderData = {
       ...customer,
       direccion: fullDireccion,
-      items: cart,
+      items: cart.map(item => ({
+        ...item,
+        price: cartTierPrice
+      })),
       subtotal: finalTotal,
       envio: selectedShipping ? selectedShipping.price : 0,
       total: finalTotal + (selectedShipping ? selectedShipping.price : 0)
