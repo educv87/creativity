@@ -61,6 +61,32 @@ serve(async (req) => {
       email: "contacto@creativity.mx"
     }
 
+    // Helper para obtener peso y dimensiones lógicas de la caja
+    const getParcelConfig = (itemsCount: number) => {
+      if (itemsCount > 50) {
+        return {
+          weight: 12, // 100 playeras pesan aprox 12kg en caja grande
+          length: 50,
+          width: 40,
+          height: 35
+        };
+      } else if (itemsCount > 20) {
+        return {
+          weight: 5,  // 20-50 playeras pesan aprox 5kg en caja mediana
+          length: 40,
+          width: 30,
+          height: 25
+        };
+      } else {
+        return {
+          weight: 2,  // 1-20 playeras pesan aprox 2kg en caja chica/sobre
+          length: 30,
+          width: 20,
+          height: 15
+        };
+      }
+    }
+
     // 4. Lógica Principal: CREAR ENVÍO
     if (action === 'create_shipment' && order_id) {
       const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
@@ -73,7 +99,7 @@ serve(async (req) => {
       if (orderError) throw orderError
 
       const itemsCount = order.items ? order.items.reduce((acc: number, item: any) => acc + item.quantity, 0) : 1
-      const weight = itemsCount > 50 ? 10 : itemsCount > 20 ? 5 : 2;
+      const parcelConfig = getParcelConfig(itemsCount);
 
       const shipmentPayload = {
         shipment: {
@@ -101,12 +127,7 @@ serve(async (req) => {
             phone: order.cliente_telefono || "0000000000",
             email: order.cliente_email
           },
-          parcel: {
-            weight: weight,
-            length: 30,
-            width: 20,
-            height: 10
-          }
+          parcel: parcelConfig
         }
       }
 
@@ -129,7 +150,7 @@ serve(async (req) => {
     }
 
     // 5. ACCIÓN: COTIZAR (DEFAULT)
-    const weight = total_items && total_items > 50 ? 10 : total_items && total_items > 20 ? 5 : 2;
+    const parcelConfig = getParcelConfig(total_items || 1);
 
     const quotationPayload = {
       quotation: {
@@ -147,12 +168,7 @@ serve(async (req) => {
           area_level2: "Ciudad",
           area_level3: "Colonia"
         },
-        parcel: {
-          weight: weight,
-          length: 30,
-          width: 20,
-          height: 10
-        }
+        parcel: parcelConfig
       }
     }
 
