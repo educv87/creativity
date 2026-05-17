@@ -472,7 +472,7 @@ const CheckoutPage = () => {
                 <img 
                   src={galleryImages[activeGalleryIndex].image} 
                   alt={galleryImages[activeGalleryIndex].name} 
-                  className={`w-full h-full object-cover rounded-[2rem] ${galleryImages[activeGalleryIndex].needsTint ? 'grayscale contrast-125 brightness-110' : ''}`} 
+                  className={`w-full h-full rounded-[2rem] ${galleryImages[activeGalleryIndex].id === 'medidas' ? 'object-contain bg-white p-6' : 'object-cover'} ${galleryImages[activeGalleryIndex].needsTint ? 'grayscale contrast-125 brightness-110' : ''}`} 
                   onError={(e) => {
                     e.target.onerror = null; 
                     e.target.src = `https://placehold.co/600x600/f3f4f6/a1a1aa?text=${encodeURIComponent(galleryImages[activeGalleryIndex].name)}`;
@@ -485,9 +485,9 @@ const CheckoutPage = () => {
               </div>
             )}
           </div>
-
+ 
           {/* Miniaturas de Galería */}
-          <div className="flex gap-3 overflow-x-auto pb-4 pt-2 snap-x scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          <div className="flex justify-start md:justify-center gap-4 overflow-x-auto pb-4 pt-2 snap-x scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             {galleryImages.map((item, index) => (
               <button
                 key={item.id}
@@ -499,13 +499,13 @@ const CheckoutPage = () => {
                     corte_actual: categoryData?.name
                   });
                 }}
-                className={`snap-start flex-shrink-0 w-20 h-20 md:w-24 md:h-24 rounded-2xl border-2 overflow-hidden relative transition-all duration-300 bg-white ${activeGalleryIndex === index ? 'border-gray-900 ring-2 ring-gray-900 ring-offset-2 scale-105' : 'border-gray-200 hover:border-gray-400 opacity-70 hover:opacity-100'}`}
+                className={`snap-start flex-shrink-0 w-24 h-24 md:w-32 md:h-32 rounded-[2rem] border-2 overflow-hidden relative transition-all duration-300 bg-white ${activeGalleryIndex === index ? 'border-purple-600 ring-2 ring-purple-500/20 scale-105' : 'border-gray-200 hover:border-gray-450 opacity-70 hover:opacity-100'}`}
               >
                 {index === 0 ? (
-                  <div className="w-full h-full bg-gray-50 flex items-center justify-center p-2">
+                  <div className="w-full h-full bg-gray-50 flex items-center justify-center p-3">
                     <div className="relative w-full h-full">
-                      <img src={categoryData.image} alt="Tshirt" className="absolute inset-0 w-full h-full object-contain scale-[1.5] mt-2" />
-                      <div className={`absolute inset-0 w-full h-full mix-blend-multiply opacity-90 scale-[1.5] mt-2 ${activeColor.tint}`} 
+                      <img src={categoryData.image} alt="Tshirt" className="absolute inset-0 w-full h-full object-contain p-0.5" />
+                      <div className={`absolute inset-0 w-full h-full mix-blend-multiply opacity-90 p-0.5 ${activeColor.tint}`} 
                            style={{ maskImage: `url(${categoryData.image})`, maskSize: 'contain', maskPosition: 'center', maskRepeat: 'no-repeat', WebkitMaskImage: `url(${categoryData.image})`, WebkitMaskSize: 'contain', WebkitMaskPosition: 'center', WebkitMaskRepeat: 'no-repeat' }}></div>
                     </div>
                   </div>
@@ -514,7 +514,7 @@ const CheckoutPage = () => {
                     <img 
                       src={item.isVideo ? `https://img.youtube.com/vi/${item.videoId}/0.jpg` : item.image} 
                       alt={item.name} 
-                      className={`w-full h-full object-cover ${item.needsTint ? 'grayscale contrast-125 brightness-110' : ''}`} 
+                      className={`w-full h-full ${item.id === 'medidas' ? 'object-contain bg-white p-2.5' : 'object-cover'} ${item.needsTint ? 'grayscale contrast-125 brightness-110' : ''}`} 
                       onError={(e) => {
                         e.target.onerror = null; 
                         e.target.src = `https://placehold.co/150x150/f3f4f6/a1a1aa?text=${encodeURIComponent(item.icon)}`;
