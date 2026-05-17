@@ -53,7 +53,6 @@ const LandingPage = () => {
 import AdminPanel from './components/AdminPanel';
 import AdminLogin from './components/AdminLogin';
 import SuccessPage from './components/SuccessPage';
-import WhatsAppButton from './components/WhatsAppButton';
 import FeedbackWidget from './components/FeedbackWidget';
 import PromotionBanner from './components/PromotionBanner';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
@@ -70,7 +69,6 @@ function App() {
         <Route path="/pago-exitoso" element={<SuccessPage />} />
         <Route path="/admin-analitica" element={<AnalyticsDashboard />} />
       </Routes>
-      <WhatsAppButton />
       <FeedbackWidget />
     </Router>
   );
