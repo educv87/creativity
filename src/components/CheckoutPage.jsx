@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { fetchProjectData } from '../lib/data';
 import { getShippingQuotes } from '../lib/shipping';
 import { processOrderAndPayment } from '../lib/payments';
+import { trackEvent } from '../lib/analytics';
 
 
 const CheckoutPage = () => {
@@ -13,6 +14,7 @@ const CheckoutPage = () => {
   const [activeCategory, setActiveCategory] = useState(null);
   const [activeColorId, setActiveColorId] = useState(null);
   const [activeSize, setActiveSize] = useState(null);
+  const [isCartJustUpdated, setIsCartJustUpdated] = useState(false);
   const [showSizeError, setShowSizeError] = useState(false);
   const [promoCode, setPromoCode] = useState('');
   const [isPromoApplied, setIsPromoApplied] = useState(false);
@@ -87,6 +89,7 @@ const CheckoutPage = () => {
         setActiveColorId(firstColorId);
       }
       setLoading(false);
+      trackEvent('abrir_checkout');
     };
 
     loadData();
@@ -172,6 +175,7 @@ const CheckoutPage = () => {
     if (!newCatData.colors.includes(activeColorId)) {
       setActiveColorId(newCatData.colors[0]);
     }
+    trackEvent('seleccionar_corte', { corte_id: catId, corte_nombre: newCatData?.name });
   };
 
   // Find real price from inventory
@@ -258,6 +262,20 @@ const CheckoutPage = () => {
       setCart([...cart, newItem]);
     }
 
+    // Registrar analíticas
+    trackEvent('agregar_pedido', { 
+      corte: categoryData.name, 
+      color: activeColor.name, 
+      talla: activeSize, 
+      cantidad: quantity,
+      precio_unidad: basePrice,
+      total_precio: totalPrice
+    });
+
+    // Feedback visual del carrito flotante
+    setIsCartJustUpdated(true);
+    setTimeout(() => setIsCartJustUpdated(false), 2000);
+
     setQuantity(1);
     setActiveSize(null);
   };
@@ -332,6 +350,14 @@ const CheckoutPage = () => {
       const result = await getShippingQuotes(customer.cp, totalPieces);
       setDebugMsg(`Respuesta de Servidor: ${result.success ? 'Exitosa' : 'Fallida'}`);
 
+      trackEvent('cotizar_envio', { 
+        cp_destino: customer.cp, 
+        piezas_totales: totalPieces,
+        exitoso: result.success,
+        paqueterias_encontradas: result.options?.length || 0,
+        mensaje: result.success ? 'Ok' : result.message
+      });
+
       if (result.success) {
         if (result.options && result.options.length > 0) {
           setShippingOptions(result.options);
@@ -344,6 +370,7 @@ const CheckoutPage = () => {
       }
     } catch (err) {
       setDebugMsg(`Crash detectado: ${err.message}`);
+      trackEvent('cotizar_envio_error', { cp_destino: customer.cp, error: err.message });
     } finally {
       setIsQuoting(false);
     }
@@ -370,10 +397,19 @@ const CheckoutPage = () => {
       total: finalTotal + (selectedShipping ? selectedShipping.price : 0)
     };
 
+    trackEvent('iniciar_pago_click', {
+      piezas_totales: totalPieces,
+      subtotal: finalTotal,
+      envio: orderData.envio,
+      total_pago: orderData.total,
+      paqueteria_seleccionada: selectedShipping?.name
+    });
+
     try {
       await processOrderAndPayment(orderData);
     } catch (err) {
       alert("Hubo un error al iniciar el pago: " + err.message);
+      trackEvent('iniciar_pago_error', { error: err.message });
     }
   };
 
@@ -390,10 +426,10 @@ const CheckoutPage = () => {
         <button onClick={() => navigate('/')} className="text-sm font-bold text-gray-500 hover:text-gray-900">Volver al inicio</button>
       </nav>
 
-      <div className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-2 gap-8 items-start relative z-10 min-h-[calc(100vh-72px)] lg:pt-10">
+      <div className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start relative z-10 min-h-[calc(100vh-72px)] lg:pt-10">
         
         {/* Lado Izquierdo: Visualizador Dinámico y Galería */}
-        <div className="flex flex-col gap-4 w-full">
+        <div className="flex flex-col gap-4 w-full lg:col-span-7">
           <div className="relative w-full aspect-square bg-gray-100 rounded-[3rem] shadow-inner flex items-center justify-center p-6 lg:p-12 overflow-hidden">
             
             {/* Fondo Orgánico */}
@@ -491,7 +527,7 @@ const CheckoutPage = () => {
         </div>
 
         {/* Lado Derecho: Configurador */}
-        <div className="flex flex-col gap-4 md:gap-5">
+        <div className="flex flex-col gap-4 md:gap-5 lg:col-span-5">
           <div>
             <h1 className="text-2xl md:text-4xl lg:text-4xl font-black text-gray-900 tracking-tight mb-3">Configura tu Pedido</h1>
             
@@ -534,7 +570,10 @@ const CheckoutPage = () => {
                 return (
                   <button
                     key={color.id}
-                    onClick={() => setActiveColorId(color.id)}
+                    onClick={() => {
+                      setActiveColorId(color.id);
+                      trackEvent('seleccionar_color', { color_id: color.id, color_nombre: color.name });
+                    }}
                     className={`w-10 h-10 md:w-10 md:h-10 rounded-full border border-gray-200 shadow-sm transition-transform duration-300 ${activeColorId === color.id ? 'ring-2 ring-offset-4 ring-gray-900 scale-110' : 'hover:scale-110'}`}
                     style={{ backgroundColor: color.hex }}
                     title={color.name}
@@ -556,6 +595,7 @@ const CheckoutPage = () => {
                   onClick={() => {
                     setActiveSize(size);
                     if (showSizeError) setShowSizeError(false);
+                    trackEvent('seleccionar_talla', { talla: size, corte_nombre: categoryData.name });
                   }}
                   className={`w-10 h-10 md:w-10 md:h-10 rounded-xl font-bold text-xs md:text-sm border-2 transition-all duration-300 flex items-center justify-center ${activeSize === size ? 'border-gray-900 bg-gray-900 text-white shadow-md scale-110' : (showSizeError ? 'border-red-300 bg-white text-red-500 hover:border-red-400' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-400')}`}
                 >
@@ -698,8 +738,10 @@ const CheckoutPage = () => {
                   onClick={() => {
                     if (promoCode === 'CREATIVITY25') {
                       setIsPromoApplied(true);
+                      trackEvent('aplicar_cupon', { codigo: promoCode, exitoso: true });
                     } else {
                       alert('Código no válido');
+                      trackEvent('aplicar_cupon', { codigo: promoCode, exitoso: false });
                     }
                   }}
                   className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${isPromoApplied ? 'bg-teal-500 text-white' : 'bg-gray-900 text-white hover:bg-gray-800'}`}
@@ -1007,7 +1049,10 @@ const CheckoutPage = () => {
                         {shippingOptions.map((opt) => (
                           <button
                             key={opt.id}
-                            onClick={() => setSelectedShipping(opt)}
+                            onClick={() => {
+                              setSelectedShipping(opt);
+                              trackEvent('seleccionar_paqueteria', { paqueteria: opt.name, precio: opt.price });
+                            }}
                             className={`p-4 rounded-2xl border-2 text-left transition-all duration-300 ${selectedShipping?.id === opt.id ? 'border-blue-500 bg-blue-50 shadow-md scale-105' : 'border-gray-100 bg-white hover:border-blue-300'}`}
                           >
                             <div className="text-2xl mb-2">{opt.logo}</div>
@@ -1065,6 +1110,32 @@ const CheckoutPage = () => {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Barra de Pedido Flotante (Glassmorphic B2B Cart Bar) */}
+      {cart.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-fade-in-up">
+          <button
+            onClick={() => document.getElementById('order-summary')?.scrollIntoView({ behavior: 'smooth' })}
+            className={`flex items-center gap-3 bg-white/80 backdrop-blur-xl border border-gray-200/50 px-6 py-4 rounded-full shadow-[0_20px_40px_rgba(0,0,0,0.12)] hover:shadow-[0_20px_45px_rgba(34,197,94,0.15)] hover:border-green-500/30 transition-all duration-500 group ${isCartJustUpdated ? 'ring-4 ring-green-400 ring-offset-2 scale-105 bg-green-50/90' : 'hover:scale-105'}`}
+          >
+            <div className="relative flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-600 font-bold text-sm">
+              🛒
+              <span className={`absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white flex items-center justify-center ${isCartJustUpdated ? 'animate-ping' : ''}`}></span>
+            </div>
+            <div className="text-left">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider leading-none mb-1">Tu Pedido Actual</p>
+              <p className="text-sm font-black text-gray-900 leading-none">
+                {totalPieces} prendas <span className="text-gray-300 mx-1">•</span> <span className="text-green-600">${subtotalCart.toLocaleString()}</span>
+              </p>
+            </div>
+            <div className="ml-2 flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 group-hover:bg-green-500 group-hover:text-white transition-all duration-300">
+              <svg className="w-3.5 h-3.5 transition-transform duration-500 group-hover:translate-y-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 13l-7 7-7-7m14-6l-7 7-7-7" />
+              </svg>
+            </div>
+          </button>
         </div>
       )}
 
