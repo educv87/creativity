@@ -19,6 +19,15 @@ const AnalyticsDashboard = () => {
   });
 
   useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        navigate('/login');
+      } else {
+        fetchAnalytics();
+      }
+    };
+
     const fetchAnalytics = async () => {
       try {
         const { data, error } = await supabase
@@ -38,8 +47,13 @@ const AnalyticsDashboard = () => {
       }
     };
 
-    fetchAnalytics();
+    checkSession();
   }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate('/login');
+  };
 
   const calculateStats = (data) => {
     const sessions = {};
@@ -200,12 +214,26 @@ const AnalyticsDashboard = () => {
             CREATIVITY <span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200/60 px-2 py-0.5 rounded-md uppercase font-bold tracking-widest">Command Center</span>
           </h1>
         </div>
-        <button 
-          onClick={() => navigate('/crear-pedido')} 
-          className="text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-xl border border-gray-200 transition-all flex items-center gap-2"
-        >
-          <span>👕 Ir al Configurador</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => navigate('/admin')} 
+            className="text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-xl border border-gray-200 transition-all"
+          >
+            📋 Panel de Control
+          </button>
+          <button 
+            onClick={() => navigate('/crear-pedido')} 
+            className="text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-xl border border-gray-200 transition-all"
+          >
+            👕 Ir a Tienda
+          </button>
+          <button 
+            onClick={handleLogout} 
+            className="text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 px-4 py-2 rounded-xl border border-red-200 transition-all"
+          >
+            🔒 Cerrar Sesión
+          </button>
+        </div>
       </nav>
 
       <div className="max-w-7xl mx-auto px-4 md:px-8 mt-8 grid grid-cols-1 gap-8">
