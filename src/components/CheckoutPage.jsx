@@ -38,6 +38,14 @@ const CheckoutPage = () => {
   const [coloniasDisponibles, setColoniasDisponibles] = useState([]);
   const [isFetchingZip, setIsFetchingZip] = useState(false);
 
+  const totalPieces = cart.reduce((acc, item) => acc + Number(item.quantity), 0);
+
+  // Invalidar cotización de envío si cambia la cantidad total de playeras
+  useEffect(() => {
+    setShippingOptions(null);
+    setSelectedShipping(null);
+  }, [totalPieces]);
+
 
 
 
@@ -173,7 +181,6 @@ const CheckoutPage = () => {
     (activeSize ? i.talla === activeSize : true) // Si no hay talla seleccionada, usa la primera variante que encuentre
   );
 
-  const totalPieces = cart.reduce((acc, item) => acc + Number(item.quantity), 0);
   const potentialTotal = totalPieces + (Number(quantity) || 0);
 
   const getTieredPrice = (qty) => {
