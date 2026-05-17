@@ -480,7 +480,7 @@ const CheckoutPage = () => {
                 />
                 {/* Capa de Tinte Dinámico para las texturas de la galería */}
                 {galleryImages[activeGalleryIndex].needsTint && (
-                  <div className={`absolute inset-0 w-full h-full mix-blend-color opacity-100 transition-colors duration-500 rounded-[2rem] ${activeColor.tint}`}></div>
+                  <div className={`absolute inset-0 w-full h-full mix-blend-multiply opacity-90 transition-colors duration-500 rounded-[2rem] ${activeColor.tint}`}></div>
                 )}
               </div>
             )}
@@ -521,7 +521,7 @@ const CheckoutPage = () => {
                       }}
                     />
                     {(item.needsTint || item.isVideo) && (
-                      <div className={`absolute inset-0 w-full h-full mix-blend-color opacity-100 ${item.isVideo ? 'bg-black/20' : activeColor.tint}`}></div>
+                      <div className={`absolute inset-0 w-full h-full mix-blend-multiply opacity-90 ${item.isVideo ? 'bg-black/20' : activeColor.tint}`}></div>
                     )}
                     <div className="absolute inset-0 bg-black/30 flex flex-col items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 z-10">
                       <span className={`${item.isVideo ? 'text-3xl text-white' : 'text-2xl'} drop-shadow-md`}>{item.icon}</span>
