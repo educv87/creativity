@@ -152,7 +152,10 @@ const CheckoutPage = () => {
   }
 
   const categoryData = categories[activeCategory];
-  const activeColor = colorOptions[activeColorId];
+  const activeColor = colorOptions[activeColorId] ? {
+    ...colorOptions[activeColorId],
+    tint: colorOptions[activeColorId].name.toLowerCase() === 'negro' ? 'bg-[#121316]' : colorOptions[activeColorId].tint
+  } : null;
 
   let medidasImg = '/tallas_caballero.jpg';
   if (categoryData?.name.toLowerCase().includes('mujer') || categoryData?.name.toLowerCase().includes('dama')) {
