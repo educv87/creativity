@@ -125,10 +125,9 @@ const CheckoutPage = () => {
       }
     };
     
-    if (!isQuoting) {
-      fetchZipInfo();
-    }
-  }, [customer.cp, isQuoting]);
+    // Solo disparar cuando cambia el CP, independientemente de isQuoting
+    fetchZipInfo();
+  }, [customer.cp]);
 
   if (loading || !activeCategory) {
     return (

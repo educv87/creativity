@@ -66,7 +66,7 @@ export const processOrderAndPayment = async (orderData) => {
 
   } catch (error) {
     console.error('Error procesando el pago:', error);
-    alert('Hubo un error al procesar tu pago. Por favor intenta de nuevo.');
-    return null;
+    alert('Hubo un error al procesar tu pago: ' + (error.message || JSON.stringify(error)));
+    throw error;
   }
 };
