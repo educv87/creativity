@@ -491,7 +491,14 @@ const CheckoutPage = () => {
             {galleryImages.map((item, index) => (
               <button
                 key={item.id}
-                onClick={() => setActiveGalleryIndex(index)}
+                onClick={() => {
+                  setActiveGalleryIndex(index);
+                  trackEvent('visualizar_contenido', {
+                    tipo_contenido: item.name,
+                    es_video: !!item.isVideo,
+                    corte_actual: categoryData?.name
+                  });
+                }}
                 className={`snap-start flex-shrink-0 w-20 h-20 md:w-24 md:h-24 rounded-2xl border-2 overflow-hidden relative transition-all duration-300 bg-white ${activeGalleryIndex === index ? 'border-gray-900 ring-2 ring-gray-900 ring-offset-2 scale-105' : 'border-gray-200 hover:border-gray-400 opacity-70 hover:opacity-100'}`}
               >
                 {index === 0 ? (

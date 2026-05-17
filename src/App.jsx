@@ -55,6 +55,7 @@ import AdminLogin from './components/AdminLogin';
 import SuccessPage from './components/SuccessPage';
 import WhatsAppButton from './components/WhatsAppButton';
 import PromotionBanner from './components/PromotionBanner';
+import AnalyticsDashboard from './components/AnalyticsDashboard';
 
 function App() {
   return (
@@ -66,6 +67,7 @@ function App() {
         <Route path="/admin" element={<AdminPanel />} />
         <Route path="/login" element={<AdminLogin />} />
         <Route path="/pago-exitoso" element={<SuccessPage />} />
+        <Route path="/admin-analitica" element={<AnalyticsDashboard />} />
       </Routes>
       <WhatsAppButton />
     </Router>
