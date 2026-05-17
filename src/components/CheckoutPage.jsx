@@ -164,23 +164,44 @@ const CheckoutPage = () => {
     medidasImg = '/tallas_infantil.jpg';
   }
 
-  const isNegro = activeColor?.name.toLowerCase() === 'negro';
+  const colorNameLower = activeColor?.name.toLowerCase() || 'blanco';
+
+  let costuraImage = '/attr_costura.jpg';
+  let suavidadImage = '/attr_suavidad.jpg';
+
+  if (colorNameLower === 'negro') {
+    costuraImage = '/attr_costura_negro.png';
+    suavidadImage = '/attr_suavidad_negro.png';
+  } else if (colorNameLower === 'lila') {
+    costuraImage = '/attr_costura_lila.png';
+    suavidadImage = '/attr_suavidad_lila.png';
+  } else if (colorNameLower === 'menta') {
+    costuraImage = '/attr_costura_menta.png';
+    suavidadImage = '/attr_suavidad_menta.png';
+  } else if (colorNameLower === 'rosa baby') {
+    costuraImage = '/attr_costura_rosa_baby.png';
+    suavidadImage = '/attr_suavidad_rosa_baby.png';
+  } else if (colorNameLower === 'azul cielo') {
+    costuraImage = '/attr_costura_azul_cielo.png';
+    suavidadImage = '/attr_suavidad_azul_cielo.png';
+  }
+
   const galleryImages = [
     { id: 'tshirt', name: 'Vista General', icon: '👕' },
     { id: 'video', name: 'Video Real', icon: '▶️', isVideo: true, videoId: 'TF5nBZMDSMw' },
     { 
       id: 'costura', 
       name: 'Alta Costura', 
-      image: isNegro ? '/attr_costura_negro.png' : '/attr_costura.jpg', 
+      image: costuraImage, 
       icon: '🪡', 
-      needsTint: !isNegro 
+      needsTint: false 
     },
     { 
       id: 'suavidad', 
       name: 'Suavidad', 
-      image: isNegro ? '/attr_suavidad_negro.png' : '/attr_suavidad.jpg', 
+      image: suavidadImage, 
       icon: '🍑', 
-      needsTint: !isNegro 
+      needsTint: false 
     },
     { id: 'medidas', name: 'Tabla de Medidas', image: medidasImg, icon: '📏' },
   ];
@@ -459,19 +480,21 @@ const CheckoutPage = () => {
                   className="absolute inset-0 w-full h-full object-contain z-10" 
                 />
                 {/* Tinte de Color */}
-                <div 
-                  className={`absolute inset-0 w-full h-full object-contain mix-blend-multiply opacity-90 transition-colors duration-500 z-20 ${activeColor.tint}`}
-                  style={{ 
-                    maskImage: `url(${categoryData.image})`, 
-                    maskSize: 'contain', 
-                    maskRepeat: 'no-repeat', 
-                    maskPosition: 'center', 
-                    WebkitMaskImage: `url(${categoryData.image})`, 
-                    WebkitMaskSize: 'contain', 
-                    WebkitMaskRepeat: 'no-repeat', 
-                    WebkitMaskPosition: 'center' 
-                  }}
-                ></div>
+                {activeColor.name.toLowerCase() !== 'blanco' && (
+                  <div 
+                    className={`absolute inset-0 w-full h-full object-contain mix-blend-multiply opacity-90 transition-colors duration-500 z-20 ${activeColor.tint}`}
+                    style={{ 
+                      maskImage: `url(${categoryData.image})`, 
+                      maskSize: 'contain', 
+                      maskRepeat: 'no-repeat', 
+                      maskPosition: 'center', 
+                      WebkitMaskImage: `url(${categoryData.image})`, 
+                      WebkitMaskSize: 'contain', 
+                      WebkitMaskRepeat: 'no-repeat', 
+                      WebkitMaskPosition: 'center' 
+                    }}
+                  ></div>
+                )}
               </div>
             ) : galleryImages[activeGalleryIndex].isVideo ? (
               <div className="relative w-full h-full z-20 flex items-center justify-center rounded-[2rem] overflow-hidden drop-shadow-xl bg-black">
@@ -488,7 +511,7 @@ const CheckoutPage = () => {
                 <img 
                   src={galleryImages[activeGalleryIndex].image} 
                   alt={galleryImages[activeGalleryIndex].name} 
-                  className={`w-full h-full rounded-[2rem] ${galleryImages[activeGalleryIndex].id === 'medidas' ? 'object-contain bg-white p-6' : 'object-cover'} ${galleryImages[activeGalleryIndex].needsTint ? 'grayscale contrast-125 brightness-110' : ''}`} 
+                  className={`w-full h-full rounded-[2rem] ${galleryImages[activeGalleryIndex].id === 'medidas' ? 'object-contain bg-white p-6' : 'object-cover'} ${galleryImages[activeGalleryIndex].needsTint ? 'grayscale contrast-125 brightness-110' : ''} ${activeColor?.name.toLowerCase() === 'rosa baby' && galleryImages[activeGalleryIndex].id === 'suavidad' ? 'hue-rotate-[-13deg] saturate-[1.25] brightness-[1.03]' : ''} ${activeColor?.name.toLowerCase() === 'blanco' && (galleryImages[activeGalleryIndex].id === 'costura' || galleryImages[activeGalleryIndex].id === 'suavidad') ? 'grayscale saturate-0 brightness-[1.28] contrast-[0.98]' : ''}`} 
                   onError={(e) => {
                     e.target.onerror = null; 
                     e.target.src = `https://placehold.co/600x600/f3f4f6/a1a1aa?text=${encodeURIComponent(galleryImages[activeGalleryIndex].name)}`;
@@ -521,8 +544,10 @@ const CheckoutPage = () => {
                   <div className="w-full h-full bg-gray-50 flex items-center justify-center p-3">
                     <div className="relative w-full h-full">
                       <img src={categoryData.image} alt="Tshirt" className="absolute inset-0 w-full h-full object-contain p-0.5" />
-                      <div className={`absolute inset-0 w-full h-full mix-blend-multiply opacity-90 p-0.5 ${activeColor.tint}`} 
-                           style={{ maskImage: `url(${categoryData.image})`, maskSize: 'contain', maskPosition: 'center', maskRepeat: 'no-repeat', WebkitMaskImage: `url(${categoryData.image})`, WebkitMaskSize: 'contain', WebkitMaskPosition: 'center', WebkitMaskRepeat: 'no-repeat' }}></div>
+                      {activeColor.name.toLowerCase() !== 'blanco' && (
+                        <div className={`absolute inset-0 w-full h-full mix-blend-multiply opacity-90 p-0.5 ${activeColor.tint}`} 
+                             style={{ maskImage: `url(${categoryData.image})`, maskSize: 'contain', maskPosition: 'center', maskRepeat: 'no-repeat', WebkitMaskImage: `url(${categoryData.image})`, WebkitMaskSize: 'contain', WebkitMaskPosition: 'center', WebkitMaskRepeat: 'no-repeat' }}></div>
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -530,7 +555,7 @@ const CheckoutPage = () => {
                     <img 
                       src={item.isVideo ? `https://img.youtube.com/vi/${item.videoId}/0.jpg` : item.image} 
                       alt={item.name} 
-                      className={`w-full h-full ${item.id === 'medidas' ? 'object-contain bg-white p-2.5' : 'object-cover'} ${item.needsTint ? 'grayscale contrast-125 brightness-110' : ''}`} 
+                      className={`w-full h-full ${item.id === 'medidas' ? 'object-contain bg-white p-2.5' : 'object-cover'} ${item.needsTint ? 'grayscale contrast-125 brightness-110' : ''} ${activeColor?.name.toLowerCase() === 'rosa baby' && item.id === 'suavidad' ? 'hue-rotate-[-13deg] saturate-[1.25] brightness-[1.03]' : ''} ${activeColor?.name.toLowerCase() === 'blanco' && (item.id === 'costura' || item.id === 'suavidad') ? 'grayscale saturate-0 brightness-[1.28] contrast-[0.98]' : ''}`} 
                       onError={(e) => {
                         e.target.onerror = null; 
                         e.target.src = `https://placehold.co/150x150/f3f4f6/a1a1aa?text=${encodeURIComponent(item.icon)}`;
