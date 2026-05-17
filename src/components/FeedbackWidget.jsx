@@ -36,7 +36,7 @@ const FeedbackWidget = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!comment.trim()) {
-      setErrorMsg('Por favor describe la prenda que te gustaría encontrar.');
+      setErrorMsg('Por favor describe el producto que te gustaría encontrar.');
       return;
     }
 
@@ -119,7 +119,7 @@ const FeedbackWidget = () => {
         style={{ animationDuration: '3s' }}
       >
         <span className="text-sm group-hover:rotate-12 transition-transform">💡</span>
-        <span>¿No encontraste tu prenda?</span>
+        <span>¿No encuentras lo que buscas?</span>
       </button>
 
       {/* Modal / Card desplegable */}
@@ -175,12 +175,12 @@ const FeedbackWidget = () => {
                 <form onSubmit={handleSubmit} className="space-y-4">
                   {/* Comentario */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black uppercase tracking-wider text-gray-400">Describe tu prenda ideal</label>
+                    <label className="text-[10px] font-black uppercase tracking-wider text-gray-400">Describe tu producto:</label>
                     <textarea
                       required
                       value={comment}
                       onChange={(e) => setComment(e.target.value)}
-                      placeholder="Ej. Sudadera oversize corte largo en color arena, o playera manga tres cuartos color verde militar..."
+                      placeholder="Sudaderas, playeras, tazas, gorras, termos"
                       className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-800 focus:outline-none focus:border-purple-500 transition-all font-medium min-h-[90px] text-xs resize-none"
                     />
                   </div>
