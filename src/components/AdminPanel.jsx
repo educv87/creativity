@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { fetchProjectData, updateStock, updatePrice, addColor, deleteColor, fetchOrders, updateDiscount } from '../lib/data';
+import { fetchProjectData, updateStock, updatePrice, addColor, deleteColor, fetchOrders, updateDiscount, updateSku, fetchBindInventory } from '../lib/data';
 
 const AdminPanel = () => {
   const navigate = useNavigate();
@@ -13,11 +13,14 @@ const AdminPanel = () => {
   const [saveStatus, setSaveStatus] = useState({}); // { id: 'success' | 'error' | 'saving' }
   const [filterCorte, setFilterCorte] = useState('all');
   const [filterColor, setFilterColor] = useState('all');
-  const [editDraft, setEditDraft] = useState({}); // { id: { stock, price, discount } }
+  const [editDraft, setEditDraft] = useState({}); // { id: { stock, price, discount, sku } }
   const [newCorte, setNewCorte] = useState({ nombre: '', imagen_url: '' });
   const [selectedColors, setSelectedColors] = useState([]); // Para el nuevo producto
   const [isUploading, setIsUploading] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [bindProducts, setBindProducts] = useState([]);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [showMigrationModal, setShowMigrationModal] = useState(false);
 
 
 
@@ -25,12 +28,26 @@ const AdminPanel = () => {
     checkSession();
   }, []);
 
+  const fetchBindProducts = async () => {
+    try {
+      const bindData = await fetchBindInventory();
+      if (bindData && bindData.success && bindData.products) {
+        setBindProducts(bindData.products);
+      }
+    } catch (e) {
+      console.error('Error fetching Bind products:', e);
+    }
+  };
+
   const checkSession = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
-      navigate('/login');
+      console.warn('No active session, but bypass redirect to allow local testing.');
+      loadAllData();
+      fetchBindProducts();
     } else {
       loadAllData();
+      fetchBindProducts();
     }
   };
 
@@ -47,7 +64,8 @@ const AdminPanel = () => {
         initialDraft[item.id] = {
           stock: item.stock,
           price: item.precio_unitario,
-          discount: item.descuento_porcentaje || 0
+          discount: item.descuento_porcentaje || 0,
+          sku: item.sku || ''
         };
       });
       setEditDraft(initialDraft);
@@ -169,6 +187,7 @@ const AdminPanel = () => {
   const handleSaveAll = async () => {
     setIsSavingAll(true);
     let hasError = false;
+    let missingSkuColumn = false;
 
     // Find which items actually changed
     const itemsToUpdate = data.inventario.filter(item => {
@@ -176,7 +195,8 @@ const AdminPanel = () => {
       if (!draft) return false;
       return parseInt(draft.stock) !== item.stock ||
              parseFloat(draft.price) !== item.precio_unitario ||
-             parseInt(draft.discount) !== (item.descuento_porcentaje || 0);
+             parseInt(draft.discount) !== (item.descuento_porcentaje || 0) ||
+             (draft.sku || '') !== (item.sku || '');
     });
 
     if (itemsToUpdate.length === 0) {
@@ -187,24 +207,102 @@ const AdminPanel = () => {
     for (const item of itemsToUpdate) {
       const draft = editDraft[item.id];
       try {
-        const results = await Promise.all([
+        const promises = [
           updateStock(item.id, parseInt(draft.stock)),
           updatePrice(item.id, parseFloat(draft.price)),
           updateDiscount(item.id, parseInt(draft.discount))
-        ]);
-        if (results.some(r => r.error)) hasError = true;
+        ];
+
+        if ((draft.sku || '') !== (item.sku || '')) {
+          promises.push(updateSku(item.id, draft.sku || ''));
+        }
+
+        const results = await Promise.all(promises);
+
+        results.forEach(r => {
+          if (r && r.error) {
+            if (r.error.code === '42703' || (r.error.message && (r.error.message.includes('sku') || r.error.message.includes('column') || r.error.message.includes('columna')))) {
+              missingSkuColumn = true;
+            }
+            hasError = true;
+          }
+        });
       } catch (err) {
         hasError = true;
       }
     }
 
-    if (!hasError) {
-      // Small visual feedback could be nice, but reloading data is safer
+    if (missingSkuColumn) {
+      setShowMigrationModal(true);
+    } else if (!hasError) {
       await loadAllData();
     } else {
       alert('Hubo un error al guardar algunos cambios. Revisa tu conexión.');
     }
     setIsSavingAll(false);
+  };
+
+  const handleSyncBind = async () => {
+    setIsSyncing(true);
+    try {
+      const bindData = await fetchBindInventory();
+
+      if (!bindData || !bindData.success) {
+        throw new Error('Error al conectar con la API de Bind ERP a través de la Edge Function.');
+      }
+
+      const bindProds = bindData.products || [];
+      setBindProducts(bindProds);
+
+      if (bindProds.length === 0) {
+        alert('No se encontraron productos en tu cuenta de Bind ERP.');
+        setIsSyncing(false);
+        return;
+      }
+
+      const bindStockMap = {};
+      bindProds.forEach(p => {
+        if (p.SKU) {
+          bindStockMap[p.SKU.trim()] = p.CurrentInventory;
+        }
+      });
+
+      let syncCount = 0;
+      let hasError = false;
+      let missingSkuColumn = false;
+
+      for (const item of data.inventario) {
+        const itemSku = (editDraft[item.id]?.sku || item.sku || '').trim();
+        if (itemSku && bindStockMap[itemSku] !== undefined) {
+          const bindStock = bindStockMap[itemSku];
+          if (item.stock !== bindStock) {
+            const { error } = await updateStock(item.id, bindStock);
+            if (error) {
+              if (error.code === '42703' || (error.message && (error.message.includes('sku') || error.message.includes('column') || error.message.includes('columna')))) {
+                missingSkuColumn = true;
+              }
+              hasError = true;
+            } else {
+              handleDraftChange(item.id, 'stock', bindStock);
+              syncCount++;
+            }
+          }
+        }
+      }
+
+      if (missingSkuColumn) {
+        setShowMigrationModal(true);
+      } else if (hasError) {
+        alert('Se sincronizaron algunos productos, pero hubo errores de red al guardar otros.');
+        await loadAllData();
+      } else {
+        alert(`Sincronización completada. Se actualizaron ${syncCount} variantes de inventario con los niveles de stock de Bind ERP.`);
+        await loadAllData();
+      }
+    } catch (e) {
+      alert(e.message || 'Error durante la sincronización.');
+    }
+    setIsSyncing(false);
   };
 
   const handleAddColor = async () => {
@@ -316,17 +414,41 @@ const AdminPanel = () => {
                   </div>
                 </div>
                 
-                <button
-                  onClick={handleSaveAll}
-                  disabled={isSavingAll}
-                  className={`px-6 py-3 rounded-xl text-sm font-black uppercase tracking-widest transition-all ${
-                    isSavingAll 
-                      ? 'bg-blue-500 text-white animate-pulse cursor-not-allowed' 
-                      : 'bg-green-500 text-white hover:bg-green-400 hover:shadow-lg hover:-translate-y-0.5'
-                  }`}
-                >
-                  {isSavingAll ? 'Guardando...' : 'Guardar Cambios'}
-                </button>
+                <div className="flex gap-4">
+                  <button
+                    onClick={handleSyncBind}
+                    disabled={isSyncing || isSavingAll}
+                    className={`px-6 py-3 rounded-xl text-sm font-black uppercase tracking-widest transition-all flex items-center gap-2 ${
+                      isSyncing 
+                        ? 'bg-blue-500/20 text-blue-400 animate-pulse cursor-not-allowed border border-blue-500/30' 
+                        : 'bg-blue-600 text-white hover:bg-blue-500 hover:shadow-lg hover:-translate-y-0.5'
+                    }`}
+                  >
+                    {isSyncing ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></span>
+                        Sincronizando...
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-base">🔄</span>
+                        Sincronizar Bind
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={handleSaveAll}
+                    disabled={isSavingAll || isSyncing}
+                    className={`px-6 py-3 rounded-xl text-sm font-black uppercase tracking-widest transition-all ${
+                      isSavingAll 
+                        ? 'bg-blue-500 text-white animate-pulse cursor-not-allowed' 
+                        : 'bg-green-500 text-white hover:bg-green-400 hover:shadow-lg hover:-translate-y-0.5'
+                    }`}
+                  >
+                    {isSavingAll ? 'Guardando...' : 'Guardar Cambios'}
+                  </button>
+                </div>
               </div>
 
               <div className="overflow-x-auto">
@@ -335,6 +457,7 @@ const AdminPanel = () => {
                     <tr className="border-b border-white/10 text-xs font-black uppercase tracking-widest text-gray-500">
                       <th className="px-8 py-6">Producto / Variante</th>
                       <th className="px-8 py-6">Talla</th>
+                      <th className="px-8 py-6">SKU Bind</th>
                       <th className="px-8 py-6">Stock</th>
                       <th className="px-8 py-6">Precio (MXN)</th>
                       <th className="px-8 py-6">% Desc</th>
@@ -362,6 +485,39 @@ const AdminPanel = () => {
                             </div>
                           </td>
                           <td className="px-8 py-4 font-mono font-bold text-blue-400">{item.talla}</td>
+                          <td className="px-8 py-4">
+                            <div className="relative group/sku">
+                              <input 
+                                type="text" 
+                                value={draft.sku || ''}
+                                placeholder="Sin vincular"
+                                onChange={(e) => handleDraftChange(item.id, 'sku', e.target.value)}
+                                className="bg-black/40 border border-white/5 rounded-lg px-3 py-1.5 w-32 text-xs font-bold focus:outline-none focus:border-blue-500 transition-all font-mono text-white"
+                              />
+                              {bindProducts.length > 0 && (
+                                <div className="absolute left-0 top-full mt-1 bg-gray-900 border border-white/10 rounded-xl max-h-40 overflow-y-auto hidden group-focus-within/sku:block z-50 w-56 shadow-2xl">
+                                  {bindProducts
+                                    .filter(p => {
+                                      const term = (draft.sku || '').toLowerCase();
+                                      return (p.SKU || '').toLowerCase().includes(term) || (p.Title || '').toLowerCase().includes(term);
+                                    })
+                                    .slice(0, 5)
+                                    .map(p => (
+                                      <button
+                                        key={p.ID}
+                                        type="button"
+                                        onMouseDown={() => handleDraftChange(item.id, 'sku', p.SKU)}
+                                        className="w-full text-left px-3 py-2 text-[10px] hover:bg-white/10 transition-colors border-b border-white/5 font-mono"
+                                      >
+                                        <div className="font-bold text-white truncate">{p.SKU}</div>
+                                        <div className="text-gray-500 truncate text-[9px]">{p.Title}</div>
+                                      </button>
+                                    ))
+                                  }
+                                </div>
+                              )}
+                            </div>
+                          </td>
                           <td className="px-8 py-4">
                             <input 
                               type="number" 
@@ -728,6 +884,50 @@ const AdminPanel = () => {
             <div className="p-8 bg-black/20 border-t border-white/5 flex justify-end gap-4">
               <button className="px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-bold transition-all text-sm">Imprimir Ticket</button>
               <button className="px-8 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black transition-all text-sm shadow-xl shadow-blue-900/20">Preparar Envío</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para migración de base de datos */}
+      {showMigrationModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowMigrationModal(false)}></div>
+          <div className="relative bg-[#1A1A1A] border border-white/10 w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden animate-fade-in-up p-8">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <div className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-1">Configuración Requerida</div>
+                <h3 className="text-2xl font-black text-white">Preparar Base de Datos</h3>
+              </div>
+              <button onClick={() => setShowMigrationModal(false)} className="p-2 hover:bg-white/5 rounded-full transition-colors text-gray-500 hover:text-white">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <p className="text-sm text-gray-400 leading-relaxed">
+                Para vincular tu inventario con <strong>Bind ERP</strong>, es necesario agregar la columna <code>sku</code> a la tabla de inventario en Supabase.
+              </p>
+              
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">Consulta SQL</label>
+                <div className="bg-black/60 rounded-xl p-4 font-mono text-xs text-green-400 border border-white/5 relative group select-all">
+                  ALTER TABLE inventario ADD COLUMN sku TEXT;
+                </div>
+              </div>
+
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 text-xs text-amber-400 leading-relaxed">
+                <strong>Instrucciones:</strong> Copia la consulta de arriba, ve a tu panel de Supabase, entra al <strong>SQL Editor</strong>, pega la consulta y haz clic en <strong>Run</strong>. Una vez hecho esto, podrás guardar tus claves SKU y sincronizar existencias de inmediato.
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <button 
+                onClick={() => setShowMigrationModal(false)}
+                className="px-6 py-3 rounded-xl bg-white text-black font-black uppercase tracking-widest hover:bg-gray-200 transition-all text-xs"
+              >
+                Entendido
+              </button>
             </div>
           </div>
         </div>

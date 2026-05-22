@@ -1,10 +1,25 @@
 import { supabase } from './supabase';
+import { fetchProjectData } from './data';
 
 /**
  * Crea una orden en Supabase e inicializa el pago en Mercado Pago
  */
 export const processOrderAndPayment = async (orderData) => {
   try {
+    // 0. Verificación final de stock en tiempo real
+    const projectData = await fetchProjectData();
+    if (projectData && projectData.inventario) {
+      for (const item of orderData.items) {
+        const liveItem = projectData.inventario.find(i => i.id === item.inventoryId);
+        if (!liveItem) {
+          throw new Error(`El producto ${item.category} - ${item.color} (${item.size}) ya no existe en el catálogo.`);
+        }
+        if (item.quantity > liveItem.stock) {
+          throw new Error(`El producto ${item.category} - ${item.color} (${item.size}) ya no tiene stock suficiente. Disponible: ${liveItem.stock}. Por favor ajusta tu carrito.`);
+        }
+      }
+    }
+
     // 1. Guardar la orden en Supabase (Estatus: pendiente)
     const { data: order, error: orderError } = await supabase
       .from('ordenes')

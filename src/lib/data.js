@@ -1,11 +1,32 @@
 import { supabase } from './supabase';
 
+export const fetchBindInventory = async () => {
+  try {
+    const { data, error } = await supabase.functions.invoke('bind-inventory');
+    if (error) throw error;
+    return data;
+  } catch (err) {
+    console.error('Error fetching bind inventory:', err);
+    return { success: false };
+  }
+};
+
 export const fetchProjectData = async () => {
   try {
     const { data: cortesData } = await supabase.from('cortes').select('*').order('nombre');
     const { data: coloresData } = await supabase.from('colores').select('*').order('nombre');
     const { data: relationsData } = await supabase.from('corte_colores').select('*');
     const { data: inventarioData } = await supabase.from('inventario').select('*');
+
+    // Mapeo en tiempo real con Bind ERP vía Edge Function
+    const bindData = await fetchBindInventory();
+    if (bindData && bindData.success && bindData.inventoryMap && inventarioData) {
+      inventarioData.forEach(item => {
+        if (item.sku && bindData.inventoryMap[item.sku.trim()] !== undefined) {
+          item.stock = bindData.inventoryMap[item.sku.trim()];
+        }
+      });
+    }
 
     return {
       cortes: cortesData || [],
@@ -42,6 +63,15 @@ export const updateDiscount = async (id, newDiscount) => {
     .eq('id', id);
   return { error };
 };
+
+export const updateSku = async (id, newSku) => {
+  const { error } = await supabase
+    .from('inventario')
+    .update({ sku: newSku })
+    .eq('id', id);
+  return { error };
+};
+
 
 
 export const addColor = async (color) => {

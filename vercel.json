@@ -1,5 +1,7 @@
 {
   "rewrites": [
+    { "source": "/api-bind/:path*", "destination": "https://api.bind.com.mx/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
+
