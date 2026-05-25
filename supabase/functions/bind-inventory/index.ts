@@ -18,25 +18,34 @@ serve(async (req) => {
       throw new Error("El token BIND_TOKEN no está configurado en las variables de entorno de Supabase.")
     }
 
-    // Consultar el catálogo de Bind ERP
-    const response = await fetch('https://api.bind.com.mx/api/Products', {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${BIND_TOKEN}`,
-        'Accept': 'application/json'
-      }
-    })
+    // Consultar el catálogo completo de Bind ERP paginando los resultados
+    const products: any[] = [];
+    let nextUrl: string | null = 'https://api.bind.com.mx/api/Products';
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`Error de la API de Bind ERP: ${response.status} - ${errorText}`)
+    while (nextUrl) {
+      const response = await fetch(nextUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${BIND_TOKEN}`,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Error de la API de Bind ERP: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      if (data.value && Array.isArray(data.value)) {
+        products.push(...data.value);
+      }
+      
+      // La API de Bind devuelve nextLink si hay más resultados (paginación de 100 en 100)
+      nextUrl = data.nextLink || null;
     }
 
-    const data = await response.json()
-    
-    // Retornamos el catálogo. 
-    const inventoryMap: Record<string, number> = {}
-    const products = data.value || []
+    const inventoryMap: Record<string, number> = {};
     if (products.length > 0) {
       for (const product of products) {
         if (product.SKU) {

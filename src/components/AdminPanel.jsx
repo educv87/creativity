@@ -146,7 +146,7 @@ const AdminPanel = () => {
     }
 
     // 3. Generar Inventario (Tallas CH a XXL)
-    const tallas = ['XS', 'CH', 'M', 'G', 'XL', 'XXL'];
+    const tallas = ['CH', 'M', 'G', 'XL', 'XXL'];
     const inventarioEntries = [];
     
     selectedColors.forEach(colorId => {
