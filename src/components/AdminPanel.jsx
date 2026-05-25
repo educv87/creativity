@@ -21,6 +21,7 @@ const AdminPanel = () => {
   const [bindProducts, setBindProducts] = useState([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showMigrationModal, setShowMigrationModal] = useState(false);
+  const [filterOrderStatus, setFilterOrderStatus] = useState('all'); // 'all' | 'pagado' | 'pendiente'
 
 
 
@@ -577,62 +578,94 @@ const AdminPanel = () => {
 
 
           {activeTab === 'pedidos' && (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="border-b border-white/10 text-xs font-black uppercase tracking-widest text-gray-500">
-                    <th className="px-8 py-6">Fecha / ID</th>
-                    <th className="px-8 py-6">Cliente</th>
-                    <th className="px-8 py-6">Detalles</th>
-                    <th className="px-8 py-6">Total</th>
-                    <th className="px-8 py-6 text-center">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {orders.map(order => (
-                    <tr 
-                      key={order.id} 
-                      onClick={() => setSelectedOrder(order)}
-                      className="group hover:bg-white/[0.05] transition-all cursor-pointer"
-                    >
-                      <td className="px-8 py-6">
-                        <div className="text-xs font-mono text-gray-400">#{order.id.slice(0, 8)}</div>
-                        <div className="text-sm font-bold mt-1">{new Date(order.created_at).toLocaleDateString()}</div>
-                      </td>
-                      <td className="px-8 py-6">
-                        <div className="font-bold text-sm">{order.cliente_nombre}</div>
-                        <div className="text-xs text-gray-500">{order.cliente_email}</div>
-                      </td>
-                      <td className="px-8 py-6">
-                        <div className="flex flex-col gap-1">
-                          {order.items.slice(0, 2).map((item, i) => (
-                            <div key={i} className="text-[10px] text-gray-400">
-                              <span className="font-black text-blue-400">{item.quantity}x</span> {item.category}
+            <>
+              {/* Filtro de Estatus de Pedidos */}
+              <div className="p-6 border-b border-white/10 flex flex-wrap gap-4 bg-white/[0.02] justify-between items-center">
+                <div className="flex items-center gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">Estatus del Pago</label>
+                    <div className="flex gap-2">
+                      {['all', 'pagado', 'pendiente'].map((statusOption) => (
+                        <button
+                          key={statusOption}
+                          type="button"
+                          onClick={() => setFilterOrderStatus(statusOption)}
+                          className={`px-4 py-1.5 rounded-lg text-xs font-bold capitalize transition-all ${
+                            filterOrderStatus === statusOption
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-black/40 text-gray-400 border border-white/10 hover:text-white'
+                          }`}
+                        >
+                          {statusOption === 'all' ? 'Todos' : statusOption}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <span className="text-xs text-gray-500 font-medium">
+                  Mostrando {orders.filter(o => filterOrderStatus === 'all' || o.status === filterOrderStatus).length} pedidos
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-white/10 text-xs font-black uppercase tracking-widest text-gray-500">
+                      <th className="px-8 py-6">Fecha / ID</th>
+                      <th className="px-8 py-6">Cliente</th>
+                      <th className="px-8 py-6">Detalles</th>
+                      <th className="px-8 py-6">Total</th>
+                      <th className="px-8 py-6 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {orders
+                      .filter(order => filterOrderStatus === 'all' || order.status === filterOrderStatus)
+                      .map(order => (
+                        <tr 
+                          key={order.id} 
+                          onClick={() => setSelectedOrder(order)}
+                          className="group hover:bg-white/[0.05] transition-all cursor-pointer"
+                        >
+                          <td className="px-8 py-6">
+                            <div className="text-xs font-mono text-gray-400">#{order.id.slice(0, 8)}</div>
+                            <div className="text-sm font-bold mt-1">{new Date(order.created_at).toLocaleDateString()}</div>
+                          </td>
+                          <td className="px-8 py-6">
+                            <div className="font-bold text-sm">{order.cliente_nombre}</div>
+                            <div className="text-xs text-gray-500">{order.cliente_email}</div>
+                          </td>
+                          <td className="px-8 py-6">
+                            <div className="flex flex-col gap-1">
+                              {order.items.slice(0, 2).map((item, i) => (
+                                <div key={i} className="text-[10px] text-gray-400">
+                                  <span className="font-black text-blue-400">{item.quantity}x</span> {item.category}
+                                </div>
+                              ))}
+                              {order.items.length > 2 && <div className="text-[10px] text-gray-600 font-bold">+{order.items.length - 2} más...</div>}
                             </div>
-                          ))}
-                          {order.items.length > 2 && <div className="text-[10px] text-gray-600 font-bold">+{order.items.length - 2} más...</div>}
-                        </div>
-                      </td>
-                      <td className="px-8 py-6 font-black text-lg">
-                        ${parseFloat(order.total).toLocaleString()}
-                      </td>
-                      <td className="px-8 py-6 text-center">
-                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${order.status === 'pagado' ? 'bg-green-500/20 text-green-500' : 'bg-yellow-500/20 text-yellow-500'}`}>
-                          {order.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                  {orders.length === 0 && (
-                    <tr>
-                      <td colSpan="5" className="px-8 py-20 text-center text-gray-500 font-medium italic">
-                        No hay pedidos registrados todavía.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                          </td>
+                          <td className="px-8 py-6 font-black text-lg">
+                            ${parseFloat(order.total).toLocaleString()}
+                          </td>
+                          <td className="px-8 py-6 text-center">
+                            <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${order.status === 'pagado' ? 'bg-green-500/20 text-green-500' : 'bg-yellow-500/20 text-yellow-500'}`}>
+                              {order.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    {orders.filter(order => filterOrderStatus === 'all' || order.status === filterOrderStatus).length === 0 && (
+                      <tr>
+                        <td colSpan="5" className="px-8 py-20 text-center text-gray-500 font-medium italic">
+                          No hay pedidos con este estatus.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
 
           {activeTab === 'colores' && (
@@ -863,7 +896,12 @@ const AdminPanel = () => {
                 ))}
               </div>
 
-              <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3">Resumen de Pago</h4>
+              <div className="flex justify-between items-center mb-3">
+                <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Resumen de Pago</h4>
+                <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${selectedOrder.status === 'pagado' ? 'bg-green-500/20 text-green-500' : 'bg-yellow-500/20 text-yellow-500'}`}>
+                  {selectedOrder.status}
+                </span>
+              </div>
               <div className="bg-white/5 rounded-3xl p-6 border border-white/10 space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Subtotal</span>
@@ -875,8 +913,12 @@ const AdminPanel = () => {
                 </div>
                 <div className="h-px bg-white/10 my-2"></div>
                 <div className="flex justify-between items-end">
-                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Pagado</span>
-                  <span className="text-3xl font-black text-green-400">${parseFloat(selectedOrder.total).toLocaleString()}</span>
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                    {selectedOrder.status === 'pagado' ? 'Total Pagado' : 'Total (Pendiente de Pago)'}
+                  </span>
+                  <span className={`text-3xl font-black ${selectedOrder.status === 'pagado' ? 'text-green-400' : 'text-yellow-500'}`}>
+                    ${parseFloat(selectedOrder.total).toLocaleString()}
+                  </span>
                 </div>
               </div>
             </div>
