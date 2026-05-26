@@ -470,7 +470,7 @@ const AdminPanel = () => {
                       const corte = data.cortes.find(c => c.id === item.corte_id);
                       const color = data.colores.find(c => c.id === item.color_id);
                       const status = saveStatus[item.id];
-                      const draft = editDraft[item.id] || { stock: item.stock, price: item.precio_unitario, discount: item.descuento_porcentaje || 0 };
+                      const draft = editDraft[item.id] || { stock: item.stock, price: item.precio_unitario, discount: item.descuento_porcentaje || 0, sku: item.sku || '' };
                       
                       const finalPrice = draft.price * (1 - (draft.discount / 100));
 
