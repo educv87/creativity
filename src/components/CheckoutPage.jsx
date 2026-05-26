@@ -70,12 +70,19 @@ const CheckoutPage = () => {
             .filter(r => r.corte_id === c.id)
             .map(r => r.color_id);
           
+          // XXL is only available for cuts other than Infantil and Mujer (like Hombre)
+          const nameLower = c.nombre.toLowerCase();
+          const isInfantilOrMujer = nameLower.includes('infantil') || nameLower.includes('mujer') || nameLower.includes('dama') || nameLower.includes('niño');
+          const availableSizes = isInfantilOrMujer 
+            ? ['CH', 'M', 'G', 'XL'] 
+            : ['CH', 'M', 'G', 'XL', 'XXL'];
+
           catsObj[c.id] = {
             id: c.id,
             name: c.nombre,
             image: c.imagen_url,
             colors: relatedColorIds,
-            sizes: ['CH', 'M', 'G', 'XL', 'XXL'] 
+            sizes: availableSizes
           };
         });
 
