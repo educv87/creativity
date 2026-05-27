@@ -1086,11 +1086,11 @@ const AdminPanel = () => {
               <div className="bg-white/5 rounded-3xl p-6 border border-white/10 space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Subtotal</span>
-                  <span className="font-bold">${(parseFloat(selectedOrder.total) - parseFloat(selectedOrder.envio)).toLocaleString()}</span>
+                  <span className="font-bold">${(parseFloat(selectedOrder.total) - parseFloat(selectedOrder.envio_costo)).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Envío</span>
-                  <span className="font-bold">${parseFloat(selectedOrder.envio).toLocaleString()}</span>
+                  <span className="font-bold">${parseFloat(selectedOrder.envio_costo).toLocaleString()}</span>
                 </div>
                 <div className="h-px bg-white/10 my-2"></div>
                 <div className="flex justify-between items-end">

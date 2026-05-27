@@ -44,13 +44,24 @@ export const processOrderAndPayment = async (orderData) => {
     // NOTA: En un entorno real, esto se hace desde un servidor (Edge Function)
     const mpAccessToken = import.meta.env.VITE_MP_ACCESS_TOKEN;
     
-    const preference = {
-      items: orderData.items.map(item => ({
-        title: `${item.category} - ${item.color} (${item.size})`,
-        unit_price: Number(item.price),
-        quantity: Number(item.quantity),
+    const preferenceItems = orderData.items.map(item => ({
+      title: `${item.category} - ${item.color} (${item.size})`,
+      unit_price: Number(item.price),
+      quantity: Number(item.quantity),
+      currency_id: 'MXN'
+    }));
+
+    if (orderData.envio && Number(orderData.envio) > 0) {
+      preferenceItems.push({
+        title: 'Costo de Envío',
+        unit_price: Number(orderData.envio),
+        quantity: 1,
         currency_id: 'MXN'
-      })),
+      });
+    }
+
+    const preference = {
+      items: preferenceItems,
       back_urls: {
         success: `${window.location.origin}/pago-exitoso?orderId=${order.id}`,
         failure: `${window.location.origin}/parar-pedido?orderId=${order.id}`,
