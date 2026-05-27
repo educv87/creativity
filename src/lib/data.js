@@ -98,3 +98,46 @@ export const fetchOrders = async () => {
   return { data, error };
 };
 
+// --- Funciones para Objetivos de IA ---
+
+export const fetchObjectives = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('objectives')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) {
+      // Ignoramos el error de que la tabla no existe por si aún no se corre el SQL
+      console.warn('Error fetching objectives (table might not exist yet):', error.message);
+      return { data: [] };
+    }
+    return { data };
+  } catch (err) {
+    return { data: [] };
+  }
+};
+
+export const addObjective = async (objective) => {
+  const { data, error } = await supabase
+    .from('objectives')
+    .insert([objective])
+    .select();
+  return { data, error };
+};
+
+export const updateObjectiveStatus = async (id, status) => {
+  const { error } = await supabase
+    .from('objectives')
+    .update({ status })
+    .eq('id', id);
+  return { error };
+};
+
+export const deleteObjective = async (id) => {
+  const { error } = await supabase
+    .from('objectives')
+    .delete()
+    .eq('id', id);
+  return { error };
+};
+

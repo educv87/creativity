@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { fetchProjectData, updateStock, updatePrice, addColor, deleteColor, fetchOrders, updateDiscount, updateSku, fetchBindInventory } from '../lib/data';
+import { fetchProjectData, updateStock, updatePrice, addColor, deleteColor, fetchOrders, updateDiscount, updateSku, fetchBindInventory, fetchObjectives, addObjective, updateObjectiveStatus, deleteObjective } from '../lib/data';
 
 const AdminPanel = () => {
   const navigate = useNavigate();
@@ -22,6 +22,8 @@ const AdminPanel = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [showMigrationModal, setShowMigrationModal] = useState(false);
   const [filterOrderStatus, setFilterOrderStatus] = useState('all'); // 'all' | 'pagado' | 'pendiente'
+  const [objectives, setObjectives] = useState([]);
+  const [newObjective, setNewObjective] = useState({ title: '', description: '', status: 'pending' });
 
 
 
@@ -53,9 +55,10 @@ const AdminPanel = () => {
   };
 
   const loadAllData = async () => {
-    const [result, ordersResult] = await Promise.all([
+    const [result, ordersResult, objectivesResult] = await Promise.all([
       fetchProjectData(),
-      fetchOrders()
+      fetchOrders(),
+      fetchObjectives()
     ]);
     
     if (result) {
@@ -72,12 +75,78 @@ const AdminPanel = () => {
       setEditDraft(initialDraft);
     }
     if (ordersResult.data) setOrders(ordersResult.data);
+    if (objectivesResult.data) setObjectives(objectivesResult.data);
     setLoading(false);
   };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate('/login');
+  };
+
+  const handleCreateObjective = async () => {
+    if (!newObjective.title || !newObjective.description) {
+      alert('Por favor, completa el título y la descripción.');
+      return;
+    }
+    setLoading(true);
+    const { error } = await addObjective(newObjective);
+    if (error) {
+      alert('Error al crear objetivo: ' + error.message);
+    } else {
+      setNewObjective({ title: '', description: '', status: 'pending' });
+      await loadAllData();
+    }
+    setLoading(false);
+  };
+
+  const handleStatusChange = async (id, status) => {
+    setLoading(true);
+    await updateObjectiveStatus(id, status);
+    await loadAllData();
+    setLoading(false);
+  };
+
+  const handleDeleteObjective = async (id) => {
+    if (window.confirm('¿Seguro que deseas eliminar este objetivo?')) {
+      setLoading(true);
+      await deleteObjective(id);
+      await loadAllData();
+      setLoading(false);
+    }
+  };
+
+  const handleMarkAsPaid = async (orderId) => {
+    if (window.confirm('¿Seguro que deseas marcar este pedido como pagado manualmente? Esto también intentará crear la guía de envío en Skydropx.')) {
+      setLoading(true);
+      try {
+        const { error } = await supabase
+          .from('ordenes')
+          .update({ status: 'pagado' })
+          .eq('id', orderId);
+        
+        if (error) throw error;
+        
+        try {
+          const { createShipment } = await import('../lib/shipping');
+          const res = await createShipment(orderId);
+          if (res.error) {
+            alert('El pedido se marcó como pagado, pero hubo un detalle con Skydropx: ' + res.message);
+          } else {
+            alert('Pedido marcado como pagado y guía de Skydropx generada correctamente.');
+          }
+        } catch (shipErr) {
+          console.error("Error al crear guía:", shipErr);
+          alert('Pedido marcado como pagado, pero falló la generación de guía automática: ' + shipErr.message);
+        }
+
+        await loadAllData();
+        setSelectedOrder(null);
+      } catch (err) {
+        alert("Error al actualizar el pedido: " + err.message);
+      }
+      setLoading(false);
+    }
   };
 
   const handleImageUpload = async (e) => {
@@ -369,8 +438,8 @@ const AdminPanel = () => {
 
 
         {/* Tabs */}
-        <div className="flex gap-2 p-1 bg-white/5 rounded-2xl w-fit mb-8 border border-white/5">
-          {['inventario', 'pedidos', 'colores', 'cortes'].map(tab => (
+        <div className="flex gap-2 p-1 bg-white/5 rounded-2xl w-fit mb-8 border border-white/5 overflow-x-auto">
+          {['inventario', 'pedidos', 'colores', 'cortes', 'objetivos IA'].map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -841,6 +910,118 @@ const AdminPanel = () => {
             </div>
           )}
 
+          {activeTab === 'objetivos IA' && (
+            <div className="p-8">
+              <div className="flex justify-between items-center mb-8">
+                <div>
+                  <h2 className="text-2xl font-black text-white">Objetivos y Tareas (IA)</h2>
+                  <p className="text-gray-400 text-sm">Realiza un seguimiento de las metas de franquicias y mejoras en desarrollo.</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Formulario Nuevo Objetivo */}
+                <div className="lg:col-span-1 bg-white/5 rounded-3xl p-8 border border-white/10 flex flex-col gap-6 h-fit sticky top-8">
+                  <h3 className="text-xl font-black">Nuevo Objetivo</h3>
+                  
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Título</label>
+                      <input 
+                        type="text" 
+                        placeholder="Ej. Automatizar franquicias" 
+                        value={newObjective.title}
+                        onChange={e => setNewObjective({...newObjective, title: e.target.value})}
+                        className="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-3 text-sm focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Descripción</label>
+                      <textarea 
+                        rows="4"
+                        placeholder="Detalles del objetivo..." 
+                        value={newObjective.description}
+                        onChange={e => setNewObjective({...newObjective, description: e.target.value})}
+                        className="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-3 text-sm focus:outline-none focus:border-blue-500 resize-none"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Estado Inicial</label>
+                      <select 
+                        value={newObjective.status}
+                        onChange={e => setNewObjective({...newObjective, status: e.target.value})}
+                        className="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-3 text-sm focus:outline-none focus:border-blue-500"
+                      >
+                        <option value="pending">Pendiente</option>
+                        <option value="in_progress">En Progreso</option>
+                        <option value="completed">Completado</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={handleCreateObjective}
+                    disabled={loading}
+                    className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl hover:bg-blue-500 transition-all shadow-xl shadow-blue-900/20 disabled:opacity-50"
+                  >
+                    Añadir Objetivo
+                  </button>
+                </div>
+
+                {/* Lista de Objetivos */}
+                <div className="lg:col-span-2 space-y-4">
+                  {objectives.length === 0 ? (
+                    <div className="p-8 text-center text-gray-500 bg-white/5 rounded-3xl border border-white/10">
+                      No hay objetivos registrados aún.
+                    </div>
+                  ) : (
+                    objectives.map(obj => (
+                      <div key={obj.id} className="bg-white/5 rounded-[2rem] p-6 border border-white/10 flex flex-col md:flex-row gap-6 items-start md:items-center justify-between group">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h4 className="text-lg font-black text-white">{obj.title}</h4>
+                            <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                              obj.status === 'completed' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                              obj.status === 'in_progress' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
+                              'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                            }`}>
+                              {obj.status === 'completed' ? 'Completado' : obj.status === 'in_progress' ? 'En Progreso' : 'Pendiente'}
+                            </span>
+                          </div>
+                          <p className="text-gray-400 text-sm">{obj.description}</p>
+                          <div className="text-[10px] text-gray-500 mt-2">
+                            Creado: {new Date(obj.created_at).toLocaleDateString('es-MX')}
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                          <select 
+                            value={obj.status}
+                            onChange={(e) => handleStatusChange(obj.id, e.target.value)}
+                            className="bg-black/60 border border-white/10 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-white transition-colors cursor-pointer"
+                          >
+                            <option value="pending">Pendiente</option>
+                            <option value="in_progress">En Progreso</option>
+                            <option value="completed">Completado</option>
+                          </select>
+                          <button 
+                            onClick={() => handleDeleteObjective(obj.id)}
+                            className="p-2 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all opacity-0 group-hover:opacity-100"
+                            title="Eliminar"
+                          >
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
         </div>
       </div>
       {/* Modal Detalle de Pedido */}
@@ -925,7 +1106,17 @@ const AdminPanel = () => {
 
             <div className="p-8 bg-black/20 border-t border-white/5 flex justify-end gap-4">
               <button className="px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-bold transition-all text-sm">Imprimir Ticket</button>
-              <button className="px-8 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black transition-all text-sm shadow-xl shadow-blue-900/20">Preparar Envío</button>
+              {selectedOrder.status === 'pendiente' ? (
+                <button 
+                  onClick={() => handleMarkAsPaid(selectedOrder.id)}
+                  disabled={loading}
+                  className="px-8 py-3 rounded-xl bg-green-600 hover:bg-green-500 text-white font-black transition-all text-sm shadow-xl shadow-green-900/20 disabled:opacity-50"
+                >
+                  {loading ? 'Procesando...' : 'Marcar como Pagado'}
+                </button>
+              ) : (
+                <button className="px-8 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black transition-all text-sm shadow-xl shadow-blue-900/20">Preparar Envío</button>
+              )}
             </div>
           </div>
         </div>

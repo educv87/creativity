@@ -56,6 +56,7 @@ export const processOrderAndPayment = async (orderData) => {
         failure: `${window.location.origin}/parar-pedido?orderId=${order.id}`,
         pending: `${window.location.origin}/pago-pendiente?orderId=${order.id}`
       },
+      auto_return: 'approved',
       external_reference: order.id.toString()
     };
 
