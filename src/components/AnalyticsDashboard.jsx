@@ -6,6 +6,10 @@ const AnalyticsDashboard = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState([]);
+  const [rawOrders, setRawOrders] = useState([]);
+  const [filteredEvents, setFilteredEvents] = useState([]);
+  const [dateFilter, setDateFilter] = useState('7d'); // 'today' | '7d' | '30d' | 'all' | 'custom'
+  const [customDates, setCustomDates] = useState({ start: '', end: '' });
   const [peticiones, setPeticiones] = useState([]);
   const [selectedImage, setSelectedImage] = useState(null);
   const [stats, setStats] = useState({
@@ -35,19 +39,15 @@ const AnalyticsDashboard = () => {
         const [eventsRes, peticionesRes, ordersRes] = await Promise.all([
           supabase.from('eventos_analitica').select('*').order('created_at', { ascending: false }),
           supabase.from('peticiones_productos').select('*').order('created_at', { ascending: false }),
-          supabase.from('ordenes').select('total, status')
+          supabase.from('ordenes').select('total, status, created_at')
         ]);
 
         if (eventsRes.error) throw eventsRes.error;
         if (peticionesRes.error) throw peticionesRes.error;
         if (ordersRes.error) throw ordersRes.error;
 
-        const realOrders = ordersRes.data || [];
-
-        if (eventsRes.data) {
-          setEvents(eventsRes.data);
-          calculateStats(eventsRes.data, realOrders);
-        }
+        setEvents(eventsRes.data || []);
+        setRawOrders(ordersRes.data || []);
         if (peticionesRes.data) {
           setPeticiones(peticionesRes.data);
         }
@@ -60,6 +60,42 @@ const AnalyticsDashboard = () => {
 
     checkSession();
   }, []);
+
+  useEffect(() => {
+    if (events.length === 0) return;
+
+    let start = null;
+    const now = new Date();
+
+    if (dateFilter === 'today') {
+      start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    } else if (dateFilter === '7d') {
+      start = new Date();
+      start.setDate(start.getDate() - 7);
+      start.setHours(0, 0, 0, 0);
+    } else if (dateFilter === '30d') {
+      start = new Date();
+      start.setDate(start.getDate() - 30);
+      start.setHours(0, 0, 0, 0);
+    } else if (dateFilter === 'custom' && customDates.start) {
+      start = new Date(customDates.start + 'T00:00:00');
+    }
+
+    let end = dateFilter === 'custom' && customDates.end ? new Date(customDates.end + 'T23:59:59') : new Date();
+
+    const filteredEvts = events.filter(e => {
+      const date = new Date(e.created_at);
+      return (!start || date >= start) && date <= end;
+    });
+
+    const filteredOrds = rawOrders.filter(o => {
+      const date = new Date(o.created_at);
+      return (!start || date >= start) && date <= end;
+    });
+
+    setFilteredEvents(filteredEvts);
+    calculateStats(filteredEvts, filteredOrds);
+  }, [events, rawOrders, dateFilter, customDates]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -211,6 +247,27 @@ const AnalyticsDashboard = () => {
     });
   };
 
+  const getDailyTraffic = () => {
+    const daily = {};
+    // Los eventos en filteredEvents están ordenados de más reciente a más antiguo
+    // Recorremos en reversa para procesar cronológicamente y conservar el orden
+    [...filteredEvents].reverse().forEach(e => {
+      if (e.event_name === 'visita_landing' || e.event_name === 'abrir_checkout') {
+        const d = new Date(e.created_at);
+        const key = d.toLocaleDateString('es-MX', { month: 'short', day: 'numeric' });
+        daily[key] = (daily[key] || 0) + 1;
+      }
+    });
+
+    const entries = Object.entries(daily);
+    if (entries.length === 0) {
+      const todayKey = new Date().toLocaleDateString('es-MX', { month: 'short', day: 'numeric' });
+      return [{ date: todayKey, count: 0 }];
+    }
+
+    return entries.map(([date, count]) => ({ date, count })).slice(-10);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 text-gray-900 flex flex-col items-center justify-center font-sans">
@@ -219,6 +276,9 @@ const AnalyticsDashboard = () => {
       </div>
     );
   }
+
+  const dailyData = getDailyTraffic();
+  const maxCount = Math.max(...dailyData.map(d => d.count), 1);
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 font-sans pb-12">
@@ -254,6 +314,59 @@ const AnalyticsDashboard = () => {
 
       <div className="max-w-7xl mx-auto px-4 md:px-8 mt-8 grid grid-cols-1 gap-8">
         
+        {/* Barra de Filtros de Fecha */}
+        <div className="bg-white border border-gray-200 p-6 rounded-[2rem] shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Rango de Visualización</span>
+            <h2 className="text-xl font-black text-gray-900">Filtrar Analíticas</h2>
+          </div>
+          
+          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+            {/* Filtros Rápidos */}
+            <div className="flex p-1 bg-gray-105 bg-gray-100 rounded-xl border border-gray-200/50">
+              {[
+                { id: 'today', name: 'Hoy' },
+                { id: '7d', name: '7 Días' },
+                { id: '30d', name: '30 Días' },
+                { id: 'all', name: 'Todo' }
+              ].map(opt => (
+                <button
+                  key={opt.id}
+                  onClick={() => setDateFilter(opt.id)}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${dateFilter === opt.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-550 text-gray-500 hover:text-gray-900'}`}
+                >
+                  {opt.name}
+                </button>
+              ))}
+              <button
+                onClick={() => setDateFilter('custom')}
+                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${dateFilter === 'custom' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-550 text-gray-500 hover:text-gray-900'}`}
+              >
+                Personalizado
+              </button>
+            </div>
+
+            {/* Selector Personalizado */}
+            {dateFilter === 'custom' && (
+              <div className="flex items-center gap-2 animate-fade-in-up">
+                <input
+                  type="date"
+                  value={customDates.start}
+                  onChange={e => setCustomDates({ ...customDates, start: e.target.value })}
+                  className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none focus:border-purple-500 text-gray-900 cursor-pointer"
+                />
+                <span className="text-xs text-gray-400 font-bold">a</span>
+                <input
+                  type="date"
+                  value={customDates.end}
+                  onChange={e => setCustomDates({ ...customDates, end: e.target.value })}
+                  className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none focus:border-purple-500 text-gray-900 cursor-pointer"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Fila 1: KPIs Rápidos */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="bg-white border border-gray-200 p-6 rounded-3xl relative overflow-hidden group hover:shadow-md transition-all duration-300">
@@ -282,6 +395,35 @@ const AnalyticsDashboard = () => {
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Ingresos Registrados</p>
             <h3 className="text-3xl font-black text-pink-600">${stats.couponStats.revenue.toLocaleString()}<span className="text-sm text-gray-400"> MXN</span></h3>
             <span className="text-xs text-pink-600/70 font-medium block mt-2">💰 Ticket promedio alto</span>
+          </div>
+        </div>
+
+        {/* Gráfico de Visitas Diarias */}
+        <div className="bg-white border border-gray-200 p-6 md:p-8 rounded-[2rem] shadow-sm">
+          <div className="flex flex-col gap-1 mb-6">
+            <span className="text-[10px] font-black text-purple-600 uppercase tracking-widest">Tráfico Reciente</span>
+            <h2 className="text-xl font-black text-gray-900">Tendencia de Visitas Diarias</h2>
+            <p className="text-xs text-gray-400">Total de visitas únicas y aperturas de checkout registradas por día (últimos 10 días activos).</p>
+          </div>
+
+          <div className="flex items-end justify-between gap-3 md:gap-6 h-56 pt-4 border-b border-gray-100 px-2 md:px-6">
+            {dailyData.map((d, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center gap-2 group/bar h-full justify-end">
+                {/* Popover de cantidad */}
+                <div className="bg-gray-900 text-white font-mono text-[10px] font-bold py-1 px-2.5 rounded-lg shadow-md opacity-0 group-hover/bar:opacity-100 transition-opacity duration-300 pointer-events-none mb-1 text-center w-max">
+                  {d.count === 1 ? '1 visita' : `${d.count} visitas`}
+                </div>
+                {/* Barra de gráfico */}
+                <div 
+                  className="w-full bg-purple-100 hover:bg-purple-600 rounded-t-xl transition-all duration-500 cursor-pointer shadow-sm hover:shadow-md"
+                  style={{ height: `${(d.count / maxCount) * 100}%`, minHeight: '8px' }}
+                ></div>
+                {/* Etiqueta del día */}
+                <div className="text-[10px] font-bold text-gray-400 truncate w-full text-center mt-1 pb-2">
+                  {d.date}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
