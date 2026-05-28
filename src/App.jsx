@@ -5,6 +5,7 @@ import StorytellingSection from './components/StorytellingSection';
 import TestimonialsSection from './components/TestimonialsSection';
 import CheckoutPage from './components/CheckoutPage';
 import { fetchProjectData } from './lib/data';
+import { trackEvent } from './lib/analytics';
 
 const LandingPage = () => {
   const [colors, setColors] = useState([]);
@@ -24,6 +25,7 @@ const LandingPage = () => {
         setColors(adaptedColors);
       }
       setLoading(false);
+      trackEvent('visita_landing');
     };
     loadColors();
   }, []);

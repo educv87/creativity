@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { trackEvent } from '../lib/analytics';
 
 const SuccessPage = () => {
   const [searchParams] = useSearchParams();
@@ -21,6 +22,9 @@ const SuccessPage = () => {
           // 2. Crear guía preautorizada en Skydropx
           const { createShipment } = await import('../lib/shipping');
           await createShipment(orderId);
+          
+          // 3. Registrar evento de conversión exitosa
+          trackEvent('pago_exitoso', { orderId });
           
         } catch (error) {
           console.error("Error finalizando orden:", error);
