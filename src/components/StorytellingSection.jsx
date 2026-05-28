@@ -285,12 +285,7 @@ const StorytellingSection = () => {
             Envíos a todo <span className="text-purple-400 bg-purple-50 px-4 py-1 rounded-full">México</span>
           </h3>
           
-          {/* Shipping Carriers Grid */}
-          <div className="flex flex-wrap justify-center items-center gap-8 md:gap-16 mb-16 opacity-50 grayscale hover:opacity-100 hover:grayscale-0 transition-all duration-700">
-            <img src="https://upload.wikimedia.org/wikipedia/commons/d/df/FedEx_logo.svg" alt="FedEx" className="h-6 md:h-10 w-auto" />
-            <img src="https://upload.wikimedia.org/wikipedia/commons/b/b9/DHL_Logo.svg" alt="DHL" className="h-6 md:h-10 w-auto" />
-            <img src="https://upload.wikimedia.org/wikipedia/commons/7/7f/Logo_de_Estafeta.svg" alt="Estafeta" className="h-4 md:h-8 w-auto" />
-          </div>
+
 
           <div className="flex flex-col md:flex-row justify-center items-center gap-12 md:gap-16 mb-16">
             {/* Infantil */}
