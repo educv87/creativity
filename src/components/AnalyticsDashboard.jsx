@@ -32,17 +32,21 @@ const AnalyticsDashboard = () => {
 
     const fetchAnalytics = async () => {
       try {
-        const [eventsRes, peticionesRes] = await Promise.all([
+        const [eventsRes, peticionesRes, ordersRes] = await Promise.all([
           supabase.from('eventos_analitica').select('*').order('created_at', { ascending: false }),
-          supabase.from('peticiones_productos').select('*').order('created_at', { ascending: false })
+          supabase.from('peticiones_productos').select('*').order('created_at', { ascending: false }),
+          supabase.from('ordenes').select('total, status')
         ]);
 
         if (eventsRes.error) throw eventsRes.error;
         if (peticionesRes.error) throw peticionesRes.error;
+        if (ordersRes.error) throw ordersRes.error;
+
+        const realOrders = ordersRes.data || [];
 
         if (eventsRes.data) {
           setEvents(eventsRes.data);
-          calculateStats(eventsRes.data);
+          calculateStats(eventsRes.data, realOrders);
         }
         if (peticionesRes.data) {
           setPeticiones(peticionesRes.data);
@@ -62,13 +66,20 @@ const AnalyticsDashboard = () => {
     navigate('/login');
   };
 
-  const calculateStats = (data) => {
+  const calculateStats = (data, realOrders = []) => {
     const sessions = {};
     const traffic = {};
     const cities = {};
     const content = { video: 0, sizes: 0, total: 0 };
     const funnel = { opened: 0, added: 0, quoted: 0, paid: 0 };
     const coupons = { applied: 0, success: 0, revenue: 0, discounts: 0 };
+
+    // Sumar ingresos reales únicamente de las órdenes pagadas en la base de datos
+    realOrders.forEach((order) => {
+      if (order.status === 'pagado') {
+        coupons.revenue += Number(order.total) || 0;
+      }
+    });
 
     data.forEach((evt) => {
       const sessId = evt.session_id;
@@ -113,8 +124,6 @@ const AnalyticsDashboard = () => {
       }
 
       if (name === 'iniciar_pago_click') {
-        const totalPago = Number(payload.total_pago) || 0;
-        coupons.revenue += totalPago;
         const piezas = Number(payload.piezas_totales) || 0;
         if (piezas >= 50) {
           coupons.discounts += piezas * 10;
