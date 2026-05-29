@@ -11,30 +11,32 @@ export const fetchBindInventory = async () => {
   }
 };
 
-export const fetchProjectData = async () => {
+export const fetchProjectData = async (skipBind = true) => {
   try {
     const { data: cortesData } = await supabase.from('cortes').select('*').order('nombre');
     const { data: coloresData } = await supabase.from('colores').select('*').order('nombre');
     const { data: relationsData } = await supabase.from('corte_colores').select('*');
     const { data: inventarioData } = await supabase.from('inventario').select('*');
 
-    // Mapeo en tiempo real con Bind ERP vía Edge Function
-    const bindData = await fetchBindInventory();
-    if (bindData && bindData.success && inventarioData) {
-      const products = bindData.products || [];
-      const inventoryMap = {};
-      products.forEach(p => {
-        const key = (p.SKU || p.Code || '').trim();
-        if (key) {
-          inventoryMap[key] = p.CurrentInventory || 0;
-        }
-      });
+    // Mapeo en tiempo real con Bind ERP (solo si se solicita explícitamente, ej. en depuraciones)
+    if (!skipBind) {
+      const bindData = await fetchBindInventory();
+      if (bindData && bindData.success && inventarioData) {
+        const products = bindData.products || [];
+        const inventoryMap = {};
+        products.forEach(p => {
+          const key = (p.SKU || p.Code || '').trim();
+          if (key) {
+            inventoryMap[key] = p.CurrentInventory || 0;
+          }
+        });
 
-      inventarioData.forEach(item => {
-        if (item.sku && inventoryMap[item.sku.trim()] !== undefined) {
-          item.stock = inventoryMap[item.sku.trim()];
-        }
-      });
+        inventarioData.forEach(item => {
+          if (item.sku && inventoryMap[item.sku.trim()] !== undefined) {
+            item.stock = inventoryMap[item.sku.trim()];
+          }
+        });
+      }
     }
 
     return {
