@@ -265,6 +265,11 @@ const CheckoutPage = () => {
       return;
     }
 
+    if (variant.stock <= 0) {
+      alert("Lo sentimos, esta prenda está agotada en la talla seleccionada.");
+      return;
+    }
+
     // Calcular cuánto ya hay en el carrito de ESTA misma variante
     const alreadyInCart = cart
       .filter(item => item.inventoryId === variant.id)
@@ -704,9 +709,9 @@ const CheckoutPage = () => {
                       <>
                         <span className={`w-2 h-2 rounded-full ${displayStock - alreadyInCartForActive > 0 ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
                         <span className={displayStock - alreadyInCartForActive > 0 ? 'text-green-600 font-black' : 'text-red-500 font-bold'}>
-                          {displayStock - alreadyInCartForActive > 0 
-                            ? `${displayStock - alreadyInCartForActive} piezas disponibles` 
-                            : (alreadyInCartForActive >= displayStock ? 'Ya agregaste todo el stock' : 'Agotado en esta talla')}
+                          {displayStock <= 0 
+                            ? 'Agotado' 
+                            : (alreadyInCartForActive >= displayStock ? 'Ya agregaste todo el stock' : `${displayStock - alreadyInCartForActive} piezas disponibles`)}
                         </span>
                       </>
                     ) : (
