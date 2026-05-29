@@ -48,8 +48,9 @@ serve(async (req) => {
     const inventoryMap: Record<string, number> = {};
     if (products.length > 0) {
       for (const product of products) {
-        if (product.SKU) {
-          inventoryMap[product.SKU.trim()] = product.CurrentInventory || 0;
+        const key = (product.SKU || product.Code || '').trim();
+        if (key) {
+          inventoryMap[key] = product.CurrentInventory || 0;
         }
       }
     }

@@ -20,10 +20,19 @@ export const fetchProjectData = async () => {
 
     // Mapeo en tiempo real con Bind ERP vía Edge Function
     const bindData = await fetchBindInventory();
-    if (bindData && bindData.success && bindData.inventoryMap && inventarioData) {
+    if (bindData && bindData.success && inventarioData) {
+      const products = bindData.products || [];
+      const inventoryMap = {};
+      products.forEach(p => {
+        const key = (p.SKU || p.Code || '').trim();
+        if (key) {
+          inventoryMap[key] = p.CurrentInventory || 0;
+        }
+      });
+
       inventarioData.forEach(item => {
-        if (item.sku && bindData.inventoryMap[item.sku.trim()] !== undefined) {
-          item.stock = bindData.inventoryMap[item.sku.trim()];
+        if (item.sku && inventoryMap[item.sku.trim()] !== undefined) {
+          item.stock = inventoryMap[item.sku.trim()];
         }
       });
     }

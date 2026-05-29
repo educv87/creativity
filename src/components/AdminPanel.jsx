@@ -332,8 +332,9 @@ const AdminPanel = () => {
 
       const bindStockMap = {};
       bindProds.forEach(p => {
-        if (p.SKU) {
-          bindStockMap[p.SKU.trim()] = p.CurrentInventory;
+        const key = (p.SKU || p.Code || '').trim();
+        if (key) {
+          bindStockMap[key] = p.CurrentInventory;
         }
       });
 
@@ -569,17 +570,19 @@ const AdminPanel = () => {
                                   {bindProducts
                                     .filter(p => {
                                       const term = (draft.sku || '').toLowerCase();
-                                      return (p.SKU || '').toLowerCase().includes(term) || (p.Title || '').toLowerCase().includes(term);
+                                      return (p.SKU || '').toLowerCase().includes(term) || 
+                                             (p.Code || '').toLowerCase().includes(term) ||
+                                             (p.Title || '').toLowerCase().includes(term);
                                     })
                                     .slice(0, 5)
                                     .map(p => (
                                       <button
                                         key={p.ID}
                                         type="button"
-                                        onMouseDown={() => handleDraftChange(item.id, 'sku', p.SKU)}
+                                        onMouseDown={() => handleDraftChange(item.id, 'sku', p.SKU || p.Code)}
                                         className="w-full text-left px-3 py-2 text-[10px] hover:bg-white/10 transition-colors border-b border-white/5 font-mono"
                                       >
-                                        <div className="font-bold text-white truncate">{p.SKU}</div>
+                                        <div className="font-bold text-white truncate">{p.SKU || p.Code || 'Sin código'}</div>
                                         <div className="text-gray-500 truncate text-[9px]">{p.Title}</div>
                                       </button>
                                     ))
