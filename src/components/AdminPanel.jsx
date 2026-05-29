@@ -407,11 +407,30 @@ const AdminPanel = () => {
 ;
 
 
-  // Filtrado de Inventario
+  // Filtrado y Ordenación de Inventario
   const filteredInventario = data.inventario.filter(item => {
     const matchCorte = filterCorte === 'all' || item.corte_id === filterCorte;
     const matchColor = filterColor === 'all' || item.color_id === filterColor;
     return matchCorte && matchColor;
+  }).sort((a, b) => {
+    // 1. Ordenar por Corte (alfabético)
+    const corteA = data.cortes.find(c => c.id === a.corte_id)?.nombre || '';
+    const corteB = data.cortes.find(c => c.id === b.corte_id)?.nombre || '';
+    if (corteA !== corteB) return corteA.localeCompare(corteB);
+    
+    // 2. Ordenar por Color (alfabético)
+    const colorA = data.colores.find(c => c.id === a.color_id)?.nombre || '';
+    const colorB = data.colores.find(c => c.id === b.color_id)?.nombre || '';
+    if (colorA !== colorB) return colorA.localeCompare(colorB);
+    
+    // 3. Ordenar por Talla (XS, CH, M, G, XL, XXL)
+    const sizeOrder = ['XS', 'CH', 'M', 'G', 'XL', 'XXL'];
+    const indexA = sizeOrder.indexOf(a.talla);
+    const indexB = sizeOrder.indexOf(b.talla);
+    
+    const valA = indexA === -1 ? 999 : indexA;
+    const valB = indexB === -1 ? 999 : indexB;
+    return valA - valB;
   });
 
   if (loading) return (
