@@ -81,6 +81,14 @@ export const updateSku = async (id, newSku) => {
   return { error };
 };
 
+export const updateInventarioItem = async (id, updates) => {
+  const { error } = await supabase
+    .from('inventario')
+    .update(updates)
+    .eq('id', id);
+  return { error };
+};
+
 
 
 export const addColor = async (color) => {

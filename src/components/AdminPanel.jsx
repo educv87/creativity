@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { fetchProjectData, updateStock, updatePrice, addColor, deleteColor, fetchOrders, updateDiscount, updateSku, fetchBindInventory, fetchObjectives, addObjective, updateObjectiveStatus, deleteObjective } from '../lib/data';
+import { fetchProjectData, updateStock, updatePrice, addColor, deleteColor, fetchOrders, updateDiscount, updateSku, updateInventarioItem, fetchBindInventory, fetchObjectives, addObjective, updateObjectiveStatus, deleteObjective } from '../lib/data';
 
 const AdminPanel = () => {
   const navigate = useNavigate();
@@ -258,6 +258,7 @@ const AdminPanel = () => {
     setIsSavingAll(true);
     let hasError = false;
     let missingSkuColumn = false;
+    let lastErrorMsg = '';
 
     // Find which items actually changed
     const itemsToUpdate = data.inventario.filter(item => {
@@ -276,28 +277,29 @@ const AdminPanel = () => {
 
     for (const item of itemsToUpdate) {
       const draft = editDraft[item.id];
+      const updates = {
+        stock: parseInt(draft.stock),
+        precio_unitario: parseFloat(draft.price),
+        descuento_porcentaje: parseInt(draft.discount)
+      };
+
+      if ((draft.sku || '') !== (item.sku || '')) {
+        updates.sku = draft.sku || null;
+      }
+
       try {
-        const promises = [
-          updateStock(item.id, parseInt(draft.stock)),
-          updatePrice(item.id, parseFloat(draft.price)),
-          updateDiscount(item.id, parseInt(draft.discount))
-        ];
-
-        if ((draft.sku || '') !== (item.sku || '')) {
-          promises.push(updateSku(item.id, draft.sku || ''));
-        }
-
-        const results = await Promise.all(promises);
-
-        results.forEach(r => {
-          if (r && r.error) {
-            if (r.error.code === '42703' || (r.error.message && (r.error.message.includes('sku') || r.error.message.includes('column') || r.error.message.includes('columna')))) {
-              missingSkuColumn = true;
-            }
-            hasError = true;
+        const { error } = await updateInventarioItem(item.id, updates);
+        if (error) {
+          console.error("Error updating item:", item.id, error);
+          lastErrorMsg = error.message || JSON.stringify(error);
+          if (error.code === '42703' || (error.message && (error.message.toLowerCase().includes('sku') || error.message.toLowerCase().includes('column') || error.message.toLowerCase().includes('columna')))) {
+            missingSkuColumn = true;
           }
-        });
+          hasError = true;
+        }
       } catch (err) {
+        console.error("Catch error updating item:", item.id, err);
+        lastErrorMsg = err.message || String(err);
         hasError = true;
       }
     }
@@ -307,12 +309,23 @@ const AdminPanel = () => {
     } else if (!hasError) {
       await loadAllData();
     } else {
-      alert('Hubo un error al guardar algunos cambios. Revisa tu conexión.');
+      alert('Hubo un error al guardar los cambios: ' + lastErrorMsg);
     }
     setIsSavingAll(false);
   };
 
   const handleSyncBind = async () => {
+    const hasUnsavedChanges = data.inventario.some(item => {
+      const draft = editDraft[item.id];
+      if (!draft) return false;
+      return (draft.sku || '') !== (item.sku || '');
+    });
+
+    if (hasUnsavedChanges) {
+      alert('Tienes cambios de SKU/vinculación sin guardar. Por favor, haz clic en "GUARDAR CAMBIOS" antes de sincronizar para registrar los SKUs en la base de datos.');
+      return;
+    }
+
     setIsSyncing(true);
     try {
       const bindData = await fetchBindInventory();
