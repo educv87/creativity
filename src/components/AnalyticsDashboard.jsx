@@ -12,6 +12,12 @@ const AnalyticsDashboard = () => {
   const [customDates, setCustomDates] = useState({ start: '', end: '' });
   const [peticiones, setPeticiones] = useState([]);
   const [selectedImage, setSelectedImage] = useState(null);
+
+  // Filtros de demanda
+  const [filterCorteDemand, setFilterCorteDemand] = useState('all');
+  const [filterColorDemand, setFilterColorDemand] = useState('all');
+  const [filterTallaDemand, setFilterTallaDemand] = useState('all');
+
   const [stats, setStats] = useState({
     totalVisits: 0,
     totalSessions: 0,
@@ -21,7 +27,9 @@ const AnalyticsDashboard = () => {
     cities: {},
     couponStats: { applied: 0, success: 0, revenue: 0, discounts: 0 },
     contentViews: { video: 0, sizes: 0, total: 0 },
-    suggestions: []
+    suggestions: [],
+    totalUnitsAdded: 0,
+    topAddedProducts: []
   });
 
   useEffect(() => {
@@ -95,7 +103,7 @@ const AnalyticsDashboard = () => {
 
     setFilteredEvents(filteredEvts);
     calculateStats(filteredEvts, filteredOrds);
-  }, [events, rawOrders, dateFilter, customDates]);
+  }, [events, rawOrders, dateFilter, customDates, filterCorteDemand, filterColorDemand, filterTallaDemand]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -109,6 +117,9 @@ const AnalyticsDashboard = () => {
     const content = { video: 0, sizes: 0, total: 0 };
     const funnel = { opened: 0, added: 0, quoted: 0, paid: 0 };
     const coupons = { applied: 0, success: 0, revenue: 0, discounts: 0 };
+
+    const addedProducts = {};
+    let totalUnitsAdded = 0;
 
     // Sumar ingresos reales únicamente de las órdenes pagadas en la base de datos
     realOrders.forEach((order) => {
@@ -140,7 +151,33 @@ const AnalyticsDashboard = () => {
       }
 
       if (name === 'abrir_checkout') funnel.opened++;
-      if (name === 'agregar_pedido') funnel.added++;
+      if (name === 'agregar_pedido') {
+        funnel.added++;
+        const qty = Number(payload.cantidad) || 0;
+        const corte = payload.corte || 'Desconocido';
+        const color = payload.color || 'Desconocido';
+        const talla = payload.talla || 'S/T';
+
+        // Apply filters
+        const matchesCorte = filterCorteDemand === 'all' || corte.toLowerCase().includes(filterCorteDemand.toLowerCase());
+        const matchesColor = filterColorDemand === 'all' || color.toLowerCase().trim() === filterColorDemand.toLowerCase().trim();
+        const matchesTalla = filterTallaDemand === 'all' || talla.toUpperCase().trim() === filterTallaDemand.toUpperCase().trim();
+
+        if (matchesCorte && matchesColor && matchesTalla) {
+          totalUnitsAdded += qty;
+
+          const key = `${corte} - ${color} (${talla})`;
+          if (!addedProducts[key]) {
+            addedProducts[key] = {
+              corte,
+              color,
+              talla,
+              units: 0
+            };
+          }
+          addedProducts[key].units += qty;
+        }
+      }
       if (name === 'cotizar_envio') funnel.quoted++;
       if (name === 'iniciar_pago_click') funnel.paid++;
 
@@ -243,7 +280,9 @@ const AnalyticsDashboard = () => {
       cities,
       couponStats: coupons,
       contentViews: content,
-      suggestions
+      suggestions,
+      totalUnitsAdded,
+      topAddedProducts: Object.values(addedProducts).sort((a, b) => b.units - a.units)
     });
   };
 
@@ -440,7 +479,7 @@ const AnalyticsDashboard = () => {
             <div className="space-y-6">
               {[
                 { label: '1. Entraron al checkout (Visitas)', count: stats.funnel.opened || stats.totalSessions, color: 'bg-purple-655 bg-gradient-to-r from-purple-500 to-purple-600', pct: 100 },
-                { label: '2. Agregaron playeras al pedido', count: stats.funnel.added, color: 'bg-gradient-to-r from-indigo-500 to-indigo-600', pct: stats.funnel.opened ? Math.round((stats.funnel.added / (stats.funnel.opened || 1)) * 100) : 0 },
+                { label: '2. Agregaron playeras al pedido', count: `${stats.funnel.added} (${stats.totalUnitsAdded || 0} pzs)`, color: 'bg-gradient-to-r from-indigo-500 to-indigo-600', pct: stats.funnel.opened ? Math.round((stats.funnel.added / (stats.funnel.opened || 1)) * 100) : 0 },
                 { label: '3. Cotizaron envío (Skydropx)', count: stats.funnel.quoted, color: 'bg-gradient-to-r from-blue-500 to-blue-600', pct: stats.funnel.added ? Math.round((stats.funnel.quoted / (stats.funnel.added || 1)) * 100) : 0 },
                 { label: '4. Clic en Pagar (MercadoPago)', count: stats.funnel.paid, color: 'bg-gradient-to-r from-emerald-500 to-emerald-600', pct: stats.funnel.quoted ? Math.round((stats.funnel.paid / (stats.funnel.quoted || 1)) * 100) : 0 }
               ].map((step, idx) => (
@@ -582,6 +621,112 @@ const AnalyticsDashboard = () => {
             </div>
           </div>
 
+        </div>
+
+        {/* Fila 3.5: Demanda de Productos (Playeras Añadidas) */}
+        <div className="bg-white border border-gray-250/80 p-6 md:p-8 rounded-[2rem] shadow-sm">
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8 pb-6 border-b border-gray-100">
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-black text-purple-650 uppercase tracking-widest">Interés y Demanda</span>
+              <h3 className="text-xl font-black text-gray-900 flex items-center gap-2">
+                <span>👕</span> Volumen de Playeras Añadidas al Pedido
+              </h3>
+              <p className="text-xs text-gray-400">
+                Monitoreo en tiempo real de qué prendas están agregando tus clientes al carrito, con un total de <strong className="text-purple-700">{stats.totalUnitsAdded || 0} piezas</strong> filtradas.
+              </p>
+            </div>
+            
+            {/* Controles de Filtros de Producto */}
+            <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+              <div className="flex flex-col gap-1">
+                <label className="text-[9px] font-black uppercase tracking-widest text-gray-400">Género / Corte</label>
+                <select
+                  value={filterCorteDemand}
+                  onChange={e => setFilterCorteDemand(e.target.value)}
+                  className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs font-bold focus:outline-none focus:border-purple-500 text-gray-700 cursor-pointer"
+                >
+                  <option value="all">Todos los géneros</option>
+                  <option value="hombre">Hombre</option>
+                  <option value="mujer">Mujer / Dama</option>
+                  <option value="infantil">Infantil</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[9px] font-black uppercase tracking-widest text-gray-400">Color</label>
+                <select
+                  value={filterColorDemand}
+                  onChange={e => setFilterColorDemand(e.target.value)}
+                  className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs font-bold focus:outline-none focus:border-purple-500 text-gray-700 cursor-pointer"
+                >
+                  <option value="all">Todos los colores</option>
+                  <option value="blanco">Blanco</option>
+                  <option value="negro">Negro</option>
+                  <option value="lila">Lila</option>
+                  <option value="menta">Menta</option>
+                  <option value="rosa baby">Rosa Baby</option>
+                  <option value="azul cielo">Azul Cielo</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[9px] font-black uppercase tracking-widest text-gray-400">Talla</label>
+                <select
+                  value={filterTallaDemand}
+                  onChange={e => setFilterTallaDemand(e.target.value)}
+                  className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs font-bold focus:outline-none focus:border-purple-500 text-gray-700 cursor-pointer"
+                >
+                  <option value="all">Todas las tallas</option>
+                  <option value="XS">XS</option>
+                  <option value="CH">CH</option>
+                  <option value="M">M</option>
+                  <option value="G">G</option>
+                  <option value="XL">XL</option>
+                  <option value="XXL">XXL</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {stats.topAddedProducts && stats.topAddedProducts.slice(0, 9).map((item, idx) => {
+              const pct = stats.totalUnitsAdded ? Math.round((item.units / stats.totalUnitsAdded) * 100) : 0;
+              
+              const getColorHex = (colorName) => {
+                const name = String(colorName).toLowerCase().trim();
+                if (name.includes('negro')) return '#121316';
+                if (name.includes('blanco')) return '#ffffff';
+                if (name.includes('lila')) return '#d0bfff';
+                if (name.includes('menta')) return '#a7f3d0';
+                if (name.includes('rosa')) return '#fbcfe8';
+                if (name.includes('azul')) return '#bae6fd';
+                return '#e5e7eb'; // fallback gray
+              };
+
+              return (
+                <div key={idx} className="bg-gray-50 p-4 rounded-2xl border border-gray-150 flex items-center justify-between shadow-sm group hover:border-purple-300 transition-all duration-300">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full border border-gray-200/80 shadow-inner" style={{ backgroundColor: getColorHex(item.color) }}></div>
+                    <div>
+                      <div className="font-bold text-gray-800 text-sm">{item.corte}</div>
+                      <div className="text-[10px] text-gray-400 font-bold uppercase tracking-tight">
+                        {item.color} • Talla {item.talla}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-base font-black text-purple-650">{item.units} pzs</div>
+                    <div className="text-[9px] font-bold text-gray-400">{pct}% de demanda</div>
+                  </div>
+                </div>
+              );
+            })}
+            {(!stats.topAddedProducts || stats.topAddedProducts.length === 0) && (
+              <div className="col-span-full py-16 text-center text-gray-400 italic text-xs">
+                No hay datos de playeras añadidas con la combinación de filtros seleccionada.
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Fila 4: Peticiones Especiales de Clientes */}
