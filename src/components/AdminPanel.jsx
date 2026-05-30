@@ -647,19 +647,13 @@ const AdminPanel = () => {
                       <th className="px-8 py-6">Talla</th>
                       <th className="px-8 py-6">SKU Bind</th>
                       <th className="px-8 py-6">Stock</th>
-                      <th className="px-8 py-6">Precio (MXN)</th>
-                      <th className="px-8 py-6">% Desc</th>
-                      <th className="px-8 py-6">Precio Final</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {filteredInventario.map(item => {
                       const corte = data.cortes.find(c => c.id === item.corte_id);
                       const color = data.colores.find(c => c.id === item.color_id);
-                      const status = saveStatus[item.id];
                       const draft = editDraft[item.id] || { stock: item.stock, price: item.precio_unitario, discount: item.descuento_porcentaje || 0, sku: item.sku || '' };
-                      
-                      const finalPrice = draft.price * (1 - (draft.discount / 100));
 
                       return (
                         <tr key={item.id} className="group hover:bg-white/[0.02] transition-colors">
@@ -716,33 +710,7 @@ const AdminPanel = () => {
                               className="bg-black/40 border border-white/5 rounded-lg px-3 py-1.5 w-20 text-xs font-bold focus:outline-none focus:border-blue-500 transition-all"
                             />
                           </td>
-                          <td className="px-8 py-4">
-                            <div className="flex items-center gap-1">
-                              <span className="text-gray-500 font-bold text-xs">$</span>
-                              <input 
-                                type="number" 
-                                value={draft.price}
-                                onChange={(e) => handleDraftChange(item.id, 'price', e.target.value)}
-                                className="bg-black/40 border border-white/5 rounded-lg px-3 py-1.5 w-24 text-xs font-bold focus:outline-none focus:border-blue-500 transition-all"
-                              />
-                            </div>
-                          </td>
-                          <td className="px-8 py-4">
-                            <div className="flex items-center gap-1">
-                              <input 
-                                type="number" 
-                                value={draft.discount}
-                                onChange={(e) => handleDraftChange(item.id, 'discount', e.target.value)}
-                                className="bg-black/40 border border-white/5 rounded-lg px-3 py-1.5 w-16 text-xs font-bold focus:outline-none focus:border-orange-500 text-orange-400 transition-all"
-                              />
-                              <span className="text-gray-500 font-bold text-xs">%</span>
-                            </div>
-                          </td>
-                          <td className="px-8 py-4">
-                            <div className="font-black text-sm text-green-400">
-                              ${finalPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                            </div>
-                          </td>
+
                         </tr>
                       );
                     })}
