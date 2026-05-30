@@ -689,7 +689,7 @@ const AnalyticsDashboard = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {stats.topAddedProducts && stats.topAddedProducts.slice(0, 9).map((item, idx) => {
+            {stats.topAddedProducts && stats.topAddedProducts.slice(0, 10).map((item, idx) => {
               const pct = stats.totalUnitsAdded ? Math.round((item.units / stats.totalUnitsAdded) * 100) : 0;
               
               const getColorHex = (colorName) => {
@@ -704,9 +704,13 @@ const AnalyticsDashboard = () => {
               };
 
               return (
-                <div key={idx} className="bg-gray-50 p-4 rounded-2xl border border-gray-150 flex items-center justify-between shadow-sm group hover:border-purple-300 transition-all duration-300">
+                <div key={idx} className="bg-gray-50 p-4 rounded-2xl border border-gray-150 flex items-center justify-between shadow-sm group hover:border-purple-300 hover:shadow-md transition-all duration-300 relative overflow-hidden">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full border border-gray-200/80 shadow-inner" style={{ backgroundColor: getColorHex(item.color) }}></div>
+                    {/* Rank Number */}
+                    <span className="text-xl font-black text-gray-300 font-mono w-6 text-center select-none">
+                      {String(idx + 1).padStart(2, '0')}
+                    </span>
+                    <div className="w-8 h-8 rounded-full border border-gray-200 shadow-inner flex-shrink-0" style={{ backgroundColor: getColorHex(item.color) }}></div>
                     <div>
                       <div className="font-bold text-gray-800 text-sm">{item.corte}</div>
                       <div className="text-[10px] text-gray-400 font-bold uppercase tracking-tight">
