@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { fetchProjectData, updateStock, updatePrice, addColor, deleteColor, fetchOrders, updateDiscount, updateSku, updateInventarioItem, fetchBindInventory, fetchObjectives, addObjective, updateObjectiveStatus, deleteObjective } from '../lib/data';
+import { fetchProjectData, updateStock, updatePrice, addColor, deleteColor, fetchOrders, updateDiscount, updateSku, updateInventarioItem, fetchBindInventory, fetchObjectives, addObjective, updateObjectiveStatus, deleteObjective, addEscala, updateEscala, deleteEscala } from '../lib/data';
 
 const AdminPanel = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('inventario');
-  const [data, setData] = useState({ cortes: [], colores: [], inventario: [] });
+  const [data, setData] = useState({ cortes: [], colores: [], inventario: [], escalas: [] });
   const [orders, setOrders] = useState([]);
+  const [editEscalasDraft, setEditEscalasDraft] = useState({});
+  const [newEscala, setNewEscala] = useState({ min_qty: '', max_qty: '', precio: '' });
+  const [isSavingEscalas, setIsSavingEscalas] = useState(false);
   const [newColor, setNewColor] = useState({ nombre: '', hex: '#ffffff', tint_class: 'bg-white' });
   const [saveStatus, setSaveStatus] = useState({}); // { id: 'success' | 'error' | 'saving' }
   const [filterCorte, setFilterCorte] = useState('all');
@@ -73,6 +76,16 @@ const AdminPanel = () => {
         };
       });
       setEditDraft(initialDraft);
+
+      const initialEscalasDraft = {};
+      (result.escalas || []).forEach(escala => {
+        initialEscalasDraft[escala.id] = {
+          min_qty: escala.min_qty,
+          max_qty: escala.max_qty !== null && escala.max_qty !== undefined ? escala.max_qty : '',
+          precio: escala.precio
+        };
+      });
+      setEditEscalasDraft(initialEscalasDraft);
     }
     if (ordersResult.data) setOrders(ordersResult.data);
     if (objectivesResult.data) setObjectives(objectivesResult.data);
@@ -404,6 +417,78 @@ const AdminPanel = () => {
       if (!error) loadAllData();
     }
   };
+
+  const handleEscalasDraftChange = (id, field, value) => {
+    setEditEscalasDraft(prev => ({
+      ...prev,
+      [id]: { ...prev[id], [field]: value }
+    }));
+  };
+
+  const handleCreateEscala = async () => {
+    if (!newEscala.min_qty || !newEscala.precio) {
+      alert('Por favor completa al menos la cantidad mínima y el precio.');
+      return;
+    }
+    setLoading(true);
+    const { error } = await addEscala({
+      min_qty: parseInt(newEscala.min_qty),
+      max_qty: newEscala.max_qty === '' ? null : parseInt(newEscala.max_qty),
+      precio: parseFloat(newEscala.precio)
+    });
+    if (error) {
+      alert('Error al crear escala de precio: ' + error.message);
+    } else {
+      setNewEscala({ min_qty: '', max_qty: '', precio: '' });
+      await loadAllData();
+    }
+    setLoading(false);
+  };
+
+  const handleSaveEscalas = async () => {
+    setIsSavingEscalas(true);
+    let hasError = false;
+    
+    const scalesToUpdate = data.escalas.filter(scale => {
+      const draft = editEscalasDraft[scale.id];
+      if (!draft) return false;
+      const draftMaxQty = draft.max_qty === '' ? null : parseInt(draft.max_qty);
+      return parseInt(draft.min_qty) !== scale.min_qty ||
+             draftMaxQty !== scale.max_qty ||
+             parseFloat(draft.precio) !== parseFloat(scale.precio);
+    });
+
+    for (const scale of scalesToUpdate) {
+      const draft = editEscalasDraft[scale.id];
+      const { error } = await updateEscala(scale.id, {
+        min_qty: parseInt(draft.min_qty),
+        max_qty: draft.max_qty === '' ? null : parseInt(draft.max_qty),
+        precio: parseFloat(draft.precio)
+      });
+      if (error) hasError = true;
+    }
+
+    if (!hasError) {
+      alert('Escalas de precios guardadas correctamente.');
+      await loadAllData();
+    } else {
+      alert('Hubo un error al guardar algunas escalas de precios.');
+    }
+    setIsSavingEscalas(false);
+  };
+
+  const handleDeleteEscala = async (id) => {
+    if (window.confirm('¿Seguro que deseas eliminar esta escala de precio?')) {
+      setLoading(true);
+      const { error } = await deleteEscala(id);
+      if (error) {
+        alert('Error al eliminar escala de precio: ' + error.message);
+      } else {
+        await loadAllData();
+      }
+      setLoading(false);
+    }
+  };
 ;
 
 
@@ -472,13 +557,13 @@ const AdminPanel = () => {
 
         {/* Tabs */}
         <div className="flex gap-2 p-1 bg-white/5 rounded-2xl w-fit mb-8 border border-white/5 overflow-x-auto">
-          {['inventario', 'pedidos', 'colores', 'cortes', 'objetivos IA'].map(tab => (
+          {['inventario', 'pedidos', 'colores', 'cortes', 'escalas', 'objetivos IA'].map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`px-6 py-2 rounded-xl text-sm font-bold capitalize transition-all ${activeTab === tab ? 'bg-white text-black shadow-lg' : 'text-gray-400 hover:text-white'}`}
             >
-              {tab}
+              {tab === 'escalas' ? 'Escalas de Precios' : tab}
             </button>
           ))}
         </div>
@@ -1054,6 +1139,225 @@ const AdminPanel = () => {
                   )}
                 </div>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'escalas' && (
+            <div className="p-8">
+              {data.escalasError ? (
+                <div className="max-w-3xl mx-auto bg-amber-500/10 border border-amber-500/20 rounded-[2.5rem] p-8 md:p-10 shadow-2xl">
+                  <div className="flex items-center gap-4 mb-6">
+                    <span className="text-4xl">⚠️</span>
+                    <div>
+                      <h2 className="text-2xl font-black text-amber-500">Configuración de Base de Datos Requerida</h2>
+                      <p className="text-gray-400 text-sm mt-1">La tabla para gestionar las escalas de precios aún no existe en Supabase.</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-6">
+                    <p className="text-sm text-gray-300 leading-relaxed">
+                      Para habilitar esta función, copia el siguiente script SQL, ve al <strong>SQL Editor</strong> en tu panel de Supabase, pégalo y presiona <strong>Run</strong>:
+                    </p>
+                    
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">Consulta SQL de Migración</label>
+                      <pre className="bg-black/60 rounded-2xl p-6 font-mono text-xs text-green-400 border border-white/5 overflow-x-auto select-all leading-5">
+{`-- 1. Crear la tabla de escalas de precios
+CREATE TABLE escalas_precios (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  min_qty INTEGER NOT NULL,
+  max_qty INTEGER, -- NULL representa límite superior infinito (ej. 100+)
+  precio NUMERIC NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2. Habilitar Seguridad a Nivel de Fila (RLS)
+ALTER TABLE escalas_precios ENABLE ROW LEVEL SECURITY;
+
+-- 3. Políticas de acceso público/autenticado
+CREATE POLICY "Permitir lectura publica de escalas" 
+ON escalas_precios FOR SELECT 
+TO public 
+USING (true);
+
+CREATE POLICY "Permitir gestion completa a administradores" 
+ON escalas_precios FOR ALL 
+TO public
+USING (true) 
+WITH CHECK (true);
+
+-- 4. Insertar los rangos actuales predeterminados (Semilla)
+INSERT INTO escalas_precios (min_qty, max_qty, precio) VALUES 
+(1, 49, 89),
+(50, 99, 79),
+(100, NULL, 69);`}
+                      </pre>
+                    </div>
+
+                    <div className="flex justify-end gap-4 mt-6">
+                      <button 
+                        onClick={loadAllData}
+                        className="px-6 py-3 rounded-xl bg-white text-black font-black uppercase tracking-widest hover:bg-gray-200 transition-all text-xs"
+                      >
+                        🔄 Ya ejecuté el script (Refrescar)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex justify-between items-center mb-8">
+                    <div>
+                      <h2 className="text-2xl font-black text-white">Escalas de Precios Dinámicas</h2>
+                      <p className="text-gray-400 text-sm">Configura los rangos de cantidades y precios unitarios aplicados en el checkout.</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    {/* Formulario Nueva Escala */}
+                    <div className="lg:col-span-1 bg-white/5 rounded-3xl p-8 border border-white/10 flex flex-col gap-6 h-fit sticky top-8">
+                      <div>
+                        <h3 className="text-xl font-black">Nueva Escala</h3>
+                        <p className="text-gray-500 text-xs mt-1">Crea un rango de piezas y su precio unitario.</p>
+                      </div>
+                      
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Cantidad Mínima</label>
+                          <input 
+                            type="number" 
+                            placeholder="Ej. 1" 
+                            value={newEscala.min_qty}
+                            onChange={e => setNewEscala({...newEscala, min_qty: e.target.value})}
+                            className="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-3 text-sm focus:outline-none focus:border-blue-500"
+                          />
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Cantidad Máxima (Opcional)</label>
+                          <input 
+                            type="number" 
+                            placeholder="Ej. 49 (dejar vacío para sin límite, ej. 100+)" 
+                            value={newEscala.max_qty}
+                            onChange={e => setNewEscala({...newEscala, max_qty: e.target.value})}
+                            className="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-3 text-sm focus:outline-none focus:border-blue-500"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Precio Unitario (MXN)</label>
+                          <input 
+                            type="number" 
+                            placeholder="Ej. 89" 
+                            value={newEscala.precio}
+                            onChange={e => setNewEscala({...newEscala, precio: e.target.value})}
+                            className="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-3 text-sm focus:outline-none focus:border-blue-500"
+                          />
+                        </div>
+                      </div>
+
+                      <button 
+                        onClick={handleCreateEscala}
+                        disabled={loading}
+                        className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl hover:bg-blue-500 transition-all shadow-xl shadow-blue-900/20 disabled:opacity-50"
+                      >
+                        Añadir Rango
+                      </button>
+                    </div>
+
+                    {/* Lista de Escalas */}
+                    <div className="lg:col-span-2 space-y-4">
+                      <div className="flex justify-between items-center mb-2 px-2">
+                        <span className="text-xs text-gray-500 font-medium">
+                          Mostrando {data.escalas.length} rangos de precio
+                        </span>
+                        <button
+                          onClick={handleSaveEscalas}
+                          disabled={isSavingEscalas}
+                          className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                            isSavingEscalas 
+                              ? 'bg-blue-500 text-white animate-pulse cursor-not-allowed' 
+                              : 'bg-green-500 text-white hover:bg-green-400 hover:shadow-lg'
+                          }`}
+                        >
+                          {isSavingEscalas ? 'Guardando...' : 'Guardar Cambios'}
+                        </button>
+                      </div>
+
+                      {data.escalas.length === 0 ? (
+                        <div className="p-8 text-center text-gray-500 bg-white/5 rounded-3xl border border-white/10">
+                          No hay escalas de precio configuradas.
+                        </div>
+                      ) : (
+                        <div className="overflow-hidden bg-white/[0.02] border border-white/10 rounded-3xl">
+                          <table className="w-full text-left">
+                            <thead>
+                              <tr className="border-b border-white/10 text-xs font-black uppercase tracking-widest text-gray-500">
+                                <th className="px-6 py-4">Rango (Cantidades)</th>
+                                <th className="px-6 py-4">Cantidad Mínima</th>
+                                <th className="px-6 py-4">Cantidad Máxima</th>
+                                <th className="px-6 py-4">Precio Unitario</th>
+                                <th className="px-6 py-4 text-center">Acciones</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                              {data.escalas.map(scale => {
+                                const draft = editEscalasDraft[scale.id] || { min_qty: scale.min_qty, max_qty: scale.max_qty !== null ? scale.max_qty : '', precio: scale.precio };
+                                return (
+                                  <tr key={scale.id} className="hover:bg-white/[0.01]">
+                                    <td className="px-6 py-4 font-bold text-sm text-blue-400">
+                                      {scale.max_qty ? `${scale.min_qty} a ${scale.max_qty} pzs` : `Más de ${scale.min_qty - 1} pzs (${scale.min_qty}+)`}
+                                    </td>
+                                    <td className="px-6 py-4">
+                                      <input 
+                                        type="number"
+                                        value={draft.min_qty}
+                                        onChange={(e) => handleEscalasDraftChange(scale.id, 'min_qty', e.target.value)}
+                                        className="bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 w-20 text-xs font-bold text-white focus:outline-none focus:border-blue-500"
+                                      />
+                                    </td>
+                                    <td className="px-6 py-4">
+                                      <input 
+                                        type="number"
+                                        placeholder="∞"
+                                        value={draft.max_qty}
+                                        onChange={(e) => handleEscalasDraftChange(scale.id, 'max_qty', e.target.value)}
+                                        className="bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 w-20 text-xs font-bold text-white focus:outline-none focus:border-blue-500"
+                                      />
+                                    </td>
+                                    <td className="px-6 py-4">
+                                      <div className="flex items-center gap-1">
+                                        <span className="text-gray-500 text-xs">$</span>
+                                        <input 
+                                          type="number"
+                                          value={draft.precio}
+                                          onChange={(e) => handleEscalasDraftChange(scale.id, 'precio', e.target.value)}
+                                          className="bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 w-24 text-xs font-bold text-white focus:outline-none focus:border-blue-500"
+                                        />
+                                      </div>
+                                    </td>
+                                    <td className="px-6 py-4 text-center">
+                                      <button 
+                                        onClick={() => handleDeleteEscala(scale.id)}
+                                        className="p-2 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all"
+                                        title="Eliminar"
+                                      >
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
 

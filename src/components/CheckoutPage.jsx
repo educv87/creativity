@@ -39,6 +39,11 @@ const CheckoutPage = () => {
   const [debugMsg, setDebugMsg] = useState('');
   const [coloniasDisponibles, setColoniasDisponibles] = useState([]);
   const [isFetchingZip, setIsFetchingZip] = useState(false);
+  const [priceScales, setPriceScales] = useState([
+    { min_qty: 1, max_qty: 49, precio: 89 },
+    { min_qty: 50, max_qty: 99, precio: 79 },
+    { min_qty: 100, max_qty: null, precio: 69 }
+  ]);
 
   const totalPieces = cart.reduce((acc, item) => acc + Number(item.quantity), 0);
 
@@ -56,6 +61,9 @@ const CheckoutPage = () => {
       const data = await fetchProjectData();
       if (data) {
         setInventory(data.inventario || []);
+        if (data.escalas && data.escalas.length > 0) {
+          setPriceScales(data.escalas);
+        }
         
         // Transform Colors
         const colorsObj = {};
@@ -236,8 +244,14 @@ const CheckoutPage = () => {
     // Oferta de Lanzamiento: Si el cupón está activo y lleva 50+, dar precio de $69
     if (isPromoApplied && total >= 50) return 69;
     
-    if (total >= 100) return 69;
-    if (total >= 50) return 79;
+    const matchingScale = [...priceScales]
+      .sort((a, b) => b.min_qty - a.min_qty)
+      .find(scale => total >= scale.min_qty);
+    
+    if (matchingScale) {
+      return Number(matchingScale.precio);
+    }
+    
     return 89;
   };
 
@@ -305,7 +319,7 @@ const CheckoutPage = () => {
         colorHex: activeColor.hex,
         size: activeSize,
         quantity,
-        originalPrice: 89,
+        originalPrice: baseTierPrice,
         discount: 0
       };
       setCart([...cart, newItem]);
@@ -462,7 +476,7 @@ const CheckoutPage = () => {
     }
   };
 
-
+  const baseTierPrice = priceScales.length > 0 ? Number(priceScales[0].precio) : 89;
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col relative overflow-hidden font-sans">
@@ -733,36 +747,73 @@ const CheckoutPage = () => {
           <div className="mb-4">
             <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Escala de Precios</h3>
             <div className="grid grid-cols-3 gap-2">
-              <div className={`p-2 rounded-xl border-2 text-center transition-all duration-300 ${potentialTotal < 50 ? 'border-gray-900 bg-white shadow-md' : 'border-gray-100 bg-gray-50 opacity-60'}`}>
-                <p className="text-[9px] font-bold text-gray-400 uppercase">1 - 49</p>
-                <p className={`text-lg font-black ${potentialTotal < 50 ? 'text-gray-900' : 'text-gray-400'}`}>$89</p>
-              </div>
-              <div className={`p-2 rounded-xl border-2 text-center transition-all duration-300 ${potentialTotal >= 50 && potentialTotal < 100 ? 'border-pink-500 bg-white shadow-md' : 'border-gray-100 bg-gray-50 opacity-60'}`}>
-                <p className="text-[9px] font-bold text-gray-400 uppercase">50 - 99</p>
-                <p className={`text-lg font-black ${potentialTotal >= 50 && potentialTotal < 100 ? 'text-pink-500' : 'text-gray-400'}`}>$79</p>
-              </div>
-              <div className={`p-2 rounded-xl border-2 text-center transition-all duration-300 ${potentialTotal >= 100 ? 'border-teal-500 bg-white shadow-md' : 'border-gray-100 bg-gray-50 opacity-60'}`}>
-                <p className="text-[9px] font-bold text-gray-400 uppercase">100+</p>
-                <p className={`text-lg font-black ${potentialTotal >= 100 ? 'text-teal-500' : 'text-gray-400'}`}>$69</p>
-              </div>
+              {(() => {
+                const sortedScales = [...priceScales].sort((a, b) => a.min_qty - b.min_qty);
+                const currentScaleIdx = sortedScales.findIndex((scale, idx, arr) => {
+                  const nextScale = arr[idx + 1];
+                  return potentialTotal >= scale.min_qty && (!nextScale || potentialTotal < nextScale.min_qty);
+                });
+                
+                const getScaleColors = (idx) => {
+                  const list = [
+                    { border: 'border-gray-900 bg-white shadow-md', text: 'text-gray-900' },
+                    { border: 'border-pink-500 bg-white shadow-md', text: 'text-pink-500' },
+                    { border: 'border-teal-500 bg-white shadow-md', text: 'text-teal-500' },
+                    { border: 'border-purple-500 bg-white shadow-md', text: 'text-purple-500' },
+                    { border: 'border-blue-500 bg-white shadow-md', text: 'text-blue-500' }
+                  ];
+                  return list[idx % list.length];
+                };
+
+                return sortedScales.map((scale, idx) => {
+                  const isActive = idx === currentScaleIdx;
+                  const label = scale.max_qty ? `${scale.min_qty} - ${scale.max_qty}` : `${scale.min_qty}+`;
+                  const colors = getScaleColors(idx);
+                  const borderClass = isActive ? colors.border : 'border-gray-100 bg-gray-50 opacity-60';
+                  const textPriceClass = isActive ? colors.text : 'text-gray-400';
+                  
+                  return (
+                    <div key={scale.id || idx} className={`p-2 rounded-xl border-2 text-center transition-all duration-300 ${borderClass}`}>
+                      <p className="text-[9px] font-bold text-gray-400 uppercase">{label}</p>
+                      <p className={`text-lg font-black ${textPriceClass}`}>${scale.precio}</p>
+                    </div>
+                  );
+                });
+              })()}
             </div>
             
             {/* Indicador de siguiente nivel */}
-            {potentialTotal < 100 && (
-              <div className="mt-3 bg-white rounded-lg p-2 border border-gray-100 flex items-center justify-between">
-                <p className="text-[10px] font-medium text-gray-500 italic">
-                  {potentialTotal < 50 
-                    ? `¡Agrega ${50 - potentialTotal} más para bajar a $79!` 
-                    : `¡Agrega ${100 - potentialTotal} más para bajar a $69!`}
-                </p>
-                <div className="w-24 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-pink-500 transition-all duration-500" 
-                    style={{ width: `${potentialTotal < 50 ? (potentialTotal / 50) * 100 : ((potentialTotal - 50) / 50) * 100}%` }}
-                  ></div>
-                </div>
-              </div>
-            )}
+            {(() => {
+              const sortedScales = [...priceScales].sort((a, b) => a.min_qty - b.min_qty);
+              const currentScaleIdx = sortedScales.findIndex((scale, idx, arr) => {
+                const nextScale = arr[idx + 1];
+                return potentialTotal >= scale.min_qty && (!nextScale || potentialTotal < nextScale.min_qty);
+              });
+              
+              const currentScale = currentScaleIdx !== -1 ? sortedScales[currentScaleIdx] : null;
+              const nextScale = currentScaleIdx !== -1 && currentScaleIdx < sortedScales.length - 1 ? sortedScales[currentScaleIdx + 1] : null;
+              
+              if (nextScale && currentScale) {
+                const diff = nextScale.min_qty - potentialTotal;
+                const range = nextScale.min_qty - currentScale.min_qty;
+                const progress = Math.min(100, Math.max(0, ((potentialTotal - currentScale.min_qty) / (range > 0 ? range : 1)) * 100));
+                
+                return (
+                  <div className="mt-3 bg-white rounded-lg p-2 border border-gray-100 flex items-center justify-between">
+                    <p className="text-[10px] font-medium text-gray-500 italic">
+                      ¡Agrega {diff} más para bajar a ${nextScale.precio}!
+                    </p>
+                    <div className="w-24 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-pink-500 transition-all duration-500" 
+                        style={{ width: `${progress}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
           </div>
 
           {/* Total y CTA */}
@@ -913,8 +964,8 @@ const CheckoutPage = () => {
                         </div>
                       </td>
                       <td className="py-4 px-4 text-right font-medium text-gray-600 hidden sm:table-cell">
-                        {cartTierPrice < 89 && (
-                          <span className="block text-[10px] line-through opacity-50">$89.00</span>
+                        {cartTierPrice < baseTierPrice && (
+                          <span className="block text-[10px] line-through opacity-50">${baseTierPrice.toFixed(2)}</span>
                         )}
                         ${cartTierPrice.toFixed(2)}
                       </td>

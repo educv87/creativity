@@ -18,6 +18,20 @@ export const fetchProjectData = async (skipBind = true) => {
     const { data: relationsData } = await supabase.from('corte_colores').select('*');
     const { data: inventarioData } = await supabase.from('inventario').select('*');
 
+    // Consultar escalas de precios
+    let escalasData = [];
+    let escalasError = null;
+    try {
+      const { data, error } = await supabase.from('escalas_precios').select('*').order('min_qty', { ascending: true });
+      if (error) {
+        escalasError = error;
+      } else {
+        escalasData = data;
+      }
+    } catch (e) {
+      escalasError = e;
+    }
+
     // Mapeo en tiempo real con Bind ERP (solo si se solicita explícitamente, ej. en depuraciones)
     if (!skipBind) {
       const bindData = await fetchBindInventory();
@@ -43,7 +57,9 @@ export const fetchProjectData = async (skipBind = true) => {
       cortes: cortesData || [],
       colores: coloresData || [],
       relations: relationsData || [],
-      inventario: inventarioData || []
+      inventario: inventarioData || [],
+      escalas: escalasData || [],
+      escalasError: escalasError ? escalasError.message : null
     };
   } catch (error) {
     console.error('Error fetching data:', error);
@@ -155,6 +171,32 @@ export const updateObjectiveStatus = async (id, status) => {
 export const deleteObjective = async (id) => {
   const { error } = await supabase
     .from('objectives')
+    .delete()
+    .eq('id', id);
+  return { error };
+};
+
+// --- Funciones para Escalas de Precios ---
+
+export const addEscala = async (escala) => {
+  const { data, error } = await supabase
+    .from('escalas_precios')
+    .insert([escala])
+    .select();
+  return { data, error };
+};
+
+export const updateEscala = async (id, updates) => {
+  const { error } = await supabase
+    .from('escalas_precios')
+    .update(updates)
+    .eq('id', id);
+  return { error };
+};
+
+export const deleteEscala = async (id) => {
+  const { error } = await supabase
+    .from('escalas_precios')
     .delete()
     .eq('id', id);
   return { error };
