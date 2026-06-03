@@ -62,6 +62,22 @@ export const fetchProjectData = async (skipBind = true) => {
       console.error("Error fetching inventario_almacenes:", almErr);
     }
 
+    // Verificar existencia de la tabla ventas_sucursales
+    let ventasTableExists = true;
+    let ventasErrorMsg = null;
+    try {
+      const { error } = await supabase.from('ventas_sucursales').select('id').limit(1);
+      if (error) {
+        if (error.code === '42P01') {
+          ventasTableExists = false;
+        } else {
+          ventasErrorMsg = error.message;
+        }
+      }
+    } catch (e) {
+      ventasTableExists = false;
+    }
+
     return {
       cortes: cortesData || [],
       colores: coloresData || [],
@@ -69,7 +85,9 @@ export const fetchProjectData = async (skipBind = true) => {
       inventario: inventarioData || [],
       inventarioAlmacenes: inventarioAlmacenesData,
       escalas: escalasData || [],
-      escalasError: escalasError ? escalasError.message : null
+      escalasError: escalasError ? escalasError.message : null,
+      ventasTableExists,
+      ventasErrorMsg
     };
   } catch (error) {
     console.error('Error fetching data:', error);

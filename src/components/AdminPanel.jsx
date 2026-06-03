@@ -7,7 +7,7 @@ const AdminPanel = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('inventario');
-  const [data, setData] = useState({ cortes: [], colores: [], inventario: [], escalas: [] });
+  const [data, setData] = useState({ cortes: [], colores: [], inventario: [], escalas: [], ventasTableExists: true });
   const [orders, setOrders] = useState([]);
   const [editEscalasDraft, setEditEscalasDraft] = useState({});
   const [newEscala, setNewEscala] = useState({ min_qty: '', max_qty: '', precio: '' });
@@ -27,6 +27,18 @@ const AdminPanel = () => {
   const [filterOrderStatus, setFilterOrderStatus] = useState('all'); // 'all' | 'pagado' | 'pendiente'
   const [objectives, setObjectives] = useState([]);
   const [newObjective, setNewObjective] = useState({ title: '', description: '', status: 'pending' });
+
+  // CSV / Excel Import states
+  const [selectedFileName, setSelectedFileName] = useState('');
+  const [csvHeaders, setCsvHeaders] = useState([]);
+  const [csvRows, setCsvRows] = useState([]);
+  const [importMapping, setImportMapping] = useState({ fecha: '', sku: '', cantidad: '', total: '', sucursal: '' });
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
+  const [importStatusMessage, setImportStatusMessage] = useState('');
+  const [xlsParsingError, setXlsParsingError] = useState(null);
+  const [importErrors, setImportErrors] = useState([]);
+
 
 
 
@@ -95,6 +107,243 @@ const AdminPanel = () => {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate('/login');
+  };
+
+  const loadXlsxLibrary = () => {
+    return new Promise((resolve, reject) => {
+      if (window.XLSX) {
+        resolve(window.XLSX);
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
+      script.onload = () => resolve(window.XLSX);
+      script.onerror = (err) => reject(err);
+      document.head.appendChild(script);
+    });
+  };
+
+  const cleanAndFormatDate = (val) => {
+    if (!val) return null;
+    
+    // Check Excel serial number
+    const num = parseFloat(val);
+    if (!isNaN(num) && num > 30000 && num < 60000) {
+      const jsDate = new Date((num - 25569) * 86400 * 1000);
+      return jsDate.toISOString().split('T')[0];
+    }
+
+    const str = String(val).trim();
+    
+    // Try DD/MM/YYYY or YYYY-MM-DD by splitting
+    const parts = str.includes('/') ? str.split('/') : str.split('-');
+    if (parts.length === 3) {
+      // Check if it is YYYY-MM-DD
+      if (parts[0].length === 4) {
+        const year = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10);
+        const day = parseInt(parts[2], 10);
+        const d = new Date(year, month - 1, day);
+        if (!isNaN(d.getTime())) {
+          return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        }
+      }
+      // Check if it is DD/MM/YYYY
+      if (parts[2].length === 4) {
+        const day = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10);
+        const year = parseInt(parts[2], 10);
+        const d = new Date(year, month - 1, day);
+        if (!isNaN(d.getTime())) {
+          return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        }
+      }
+    }
+
+    // Try standard JS Date parsing
+    try {
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) {
+        return d.toISOString().split('T')[0];
+      }
+    } catch(e){}
+
+    return null;
+  };
+
+  const handleFileSelect = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setSelectedFileName(file.name);
+    setXlsParsingError(null);
+    setCsvHeaders([]);
+    setCsvRows([]);
+    setImportStatusMessage('');
+    setImportErrors([]);
+    
+    try {
+      const XLSX = await loadXlsxLibrary();
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const dataBytes = new Uint8Array(evt.target.result);
+          const workbook = XLSX.read(dataBytes, { type: 'array' });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          
+          // Get raw rows
+          const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+          
+          if (rawRows.length === 0) {
+            setXlsParsingError("El archivo está vacío.");
+            return;
+          }
+          
+          // Extract headers and clean empty rows
+          const headers = (rawRows[0] || []).map(h => (h !== null && h !== undefined ? h : '').toString().trim());
+          const rows = rawRows.slice(1).filter(r => r && r.some(cell => cell !== null && cell !== undefined && cell !== ''));
+          
+          setCsvHeaders(headers);
+          setCsvRows(rows);
+          
+          // Smart auto-detection
+          const mapping = { fecha: '', sku: '', cantidad: '', total: '', sucursal: '' };
+          headers.forEach((h) => {
+            const lowH = h.toLowerCase();
+            if (lowH.includes('emisión') || lowH.includes('fecha') || lowH.includes('date') || lowH.includes('emision')) {
+              mapping.fecha = h;
+            } else if (lowH.includes('código prod/serv') || lowH.includes('sku') || lowH.includes('codigo') || lowH.includes('code') || lowH.includes('producto') || lowH.includes('artículo') || lowH.includes('articulo')) {
+              mapping.sku = h;
+            } else if (lowH.includes('cantidad') || lowH.includes('cant') || lowH.includes('qty') || lowH.includes('piezas') || lowH.includes('unidades')) {
+              mapping.cantidad = h;
+            } else if (lowH.includes('total') || lowH.includes('monto') || lowH.includes('importe') || lowH.includes('total factura') || lowH.includes('neto')) {
+              mapping.total = h;
+            } else if (lowH.includes('almacén') || lowH.includes('almacen') || lowH.includes('sucursal') || lowH.includes('warehouse') || lowH.includes('tienda')) {
+              mapping.sucursal = h;
+            }
+          });
+          
+          setImportMapping(mapping);
+        } catch (err) {
+          console.error("Error parsing sheet:", err);
+          setXlsParsingError("Error al procesar el archivo Excel/CSV: " + err.message);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } catch (err) {
+      console.error("Error loading SheetJS:", err);
+      setXlsParsingError("No se pudo cargar el motor lector de Excel. Verifica tu conexión a internet.");
+    }
+  };
+
+  const handleStartImport = async () => {
+    if (!importMapping.fecha || !importMapping.sku || !importMapping.total || !importMapping.sucursal) {
+      alert("Por favor mapea las columnas obligatorias: Fecha, SKU, Total y Sucursal.");
+      return;
+    }
+    
+    setIsImporting(true);
+    setImportProgress(0);
+    setImportStatusMessage("Procesando y validando filas...");
+    setImportErrors([]);
+    
+    const fechaIdx = csvHeaders.indexOf(importMapping.fecha);
+    const skuIdx = csvHeaders.indexOf(importMapping.sku);
+    const cantIdx = importMapping.cantidad ? csvHeaders.indexOf(importMapping.cantidad) : -1;
+    const totalIdx = csvHeaders.indexOf(importMapping.total);
+    const sucIdx = csvHeaders.indexOf(importMapping.sucursal);
+    
+    const rowsToInsert = [];
+    const errors = [];
+    
+    csvRows.forEach((row, index) => {
+      const rawFecha = row[fechaIdx];
+      const rawSku = row[skuIdx];
+      const rawCant = cantIdx !== -1 ? row[cantIdx] : 1;
+      const rawTotal = row[totalIdx];
+      const rawSuc = row[sucIdx];
+      
+      // Skip empty or header rows duplicated
+      if (rawFecha === undefined && rawSku === undefined && rawTotal === undefined) return;
+      
+      const formattedFecha = cleanAndFormatDate(rawFecha);
+      if (!formattedFecha) {
+        errors.push(`Fila ${index + 2}: Fecha inválida (${rawFecha || 'vacía'})`);
+        return;
+      }
+      
+      const sku = String(rawSku || '').trim();
+      if (!sku) {
+        errors.push(`Fila ${index + 2}: SKU/Código de producto vacío`);
+        return;
+      }
+      
+      // Clean and parse quantity
+      const cantStr = String(rawCant || '1').replace(/[^0-9\-]/g, '');
+      const cantidad = parseInt(cantStr, 10) || 1;
+      
+      // Clean and parse total (removes $, commas, etc.)
+      const totalStr = String(rawTotal || '0').replace(/[^0-9\.\-]/g, '');
+      const total = parseFloat(totalStr) || 0;
+      
+      const sucursal = String(rawSuc || 'Sucursal General').trim();
+      
+      rowsToInsert.push({
+        fecha: formattedFecha,
+        sku: sku,
+        cantidad: cantidad,
+        total: total,
+        sucursal: sucursal
+      });
+    });
+    
+    if (errors.length > 0) {
+      setImportErrors(errors);
+    }
+    
+    if (rowsToInsert.length === 0) {
+      setIsImporting(false);
+      setImportProgress(0);
+      setImportStatusMessage(`Error: No se encontraron filas válidas para importar. Revisa las advertencias.`);
+      return;
+    }
+    
+    const batchSize = 100;
+    const totalBatches = Math.ceil(rowsToInsert.length / batchSize);
+    let successCount = 0;
+    let failCount = 0;
+    
+    for (let i = 0; i < totalBatches; i++) {
+      const start = i * batchSize;
+      const end = start + batchSize;
+      const batch = rowsToInsert.slice(start, end);
+      
+      setImportStatusMessage(`Importando lote ${i + 1} de ${totalBatches}...`);
+      
+      const { error } = await supabase
+        .from('ventas_sucursales')
+        .insert(batch);
+        
+      if (error) {
+        console.error(`Error importing batch ${i + 1}:`, error);
+        failCount += batch.length;
+      } else {
+        successCount += batch.length;
+      }
+      
+      setImportProgress(Math.round(((i + 1) / totalBatches) * 100));
+    }
+    
+    setIsImporting(false);
+    setImportStatusMessage(`Carga completada. Se importaron ${successCount} registros con éxito. Fallidos: ${failCount}.`);
+    
+    // Clean states
+    setCsvHeaders([]);
+    setCsvRows([]);
+    setSelectedFileName('');
+    
+    // Reload database states
+    loadAllData();
   };
 
   const handleCreateObjective = async () => {
@@ -529,13 +778,13 @@ const AdminPanel = () => {
 
         {/* Tabs */}
         <div className="flex gap-2 p-1 bg-white/5 rounded-2xl w-fit mb-8 border border-white/5 overflow-x-auto">
-          {['inventario', 'pedidos', 'colores', 'cortes', 'escalas', 'objetivos IA'].map(tab => (
+          {['inventario', 'pedidos', 'colores', 'cortes', 'escalas', 'importar_ventas', 'objetivos IA'].map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`px-6 py-2 rounded-xl text-sm font-bold capitalize transition-all ${activeTab === tab ? 'bg-white text-black shadow-lg' : 'text-gray-400 hover:text-white'}`}
             >
-              {tab === 'escalas' ? 'Escalas de Precios' : tab}
+              {tab === 'escalas' ? 'Escalas de Precios' : tab === 'importar_ventas' ? 'Importar Ventas (CSV/Excel)' : tab}
             </button>
           ))}
         </div>
@@ -1292,6 +1541,284 @@ INSERT INTO escalas_precios (min_qty, max_qty, precio) VALUES
                               })}
                             </tbody>
                           </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'importar_ventas' && (
+            <div className="p-8">
+              {!data.ventasTableExists ? (
+                <div className="max-w-3xl mx-auto bg-amber-500/10 border border-amber-500/20 rounded-[2.5rem] p-8 md:p-10 shadow-2xl">
+                  <div className="flex items-center gap-4 mb-6">
+                    <span className="text-4xl">⚠️</span>
+                    <div>
+                      <h2 className="text-2xl font-black text-amber-500">Configuración de Base de Datos Requerida</h2>
+                      <p className="text-gray-400 text-sm mt-1">La tabla para gestionar el histórico de ventas (`ventas_sucursales`) aún no existe en Supabase.</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-6">
+                    <p className="text-sm text-gray-300 leading-relaxed">
+                      Para habilitar esta función, copia el siguiente script SQL, ve al <strong>SQL Editor</strong> en tu panel de Supabase, pégalo y presiona <strong>Run</strong>:
+                    </p>
+                    
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">Consulta SQL de Migración</label>
+                      <pre className="bg-black/60 rounded-2xl p-6 font-mono text-xs text-green-400 border border-white/5 overflow-x-auto select-all leading-5">
+{`-- 1. Crear la tabla de ventas históricas por sucursal
+CREATE TABLE ventas_sucursales (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  fecha DATE NOT NULL,
+  sku TEXT NOT NULL,
+  cantidad INTEGER NOT NULL DEFAULT 1,
+  total NUMERIC NOT NULL DEFAULT 0,
+  sucursal TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2. Habilitar Seguridad a Nivel de Fila (RLS)
+ALTER TABLE ventas_sucursales ENABLE ROW LEVEL SECURITY;
+
+-- 3. Políticas de acceso público/autenticado
+CREATE POLICY "Permitir lectura publica de ventas_sucursales" 
+ON ventas_sucursales FOR SELECT 
+TO public 
+USING (true);
+
+CREATE POLICY "Permitir gestion completa de ventas_sucursales" 
+ON ventas_sucursales FOR ALL 
+TO public
+USING (true) 
+WITH CHECK (true);`}
+                      </pre>
+                    </div>
+
+                    <div className="flex justify-end gap-4 mt-6">
+                      <button 
+                        onClick={loadAllData}
+                        className="px-6 py-3 rounded-xl bg-white text-black font-black uppercase tracking-widest hover:bg-gray-200 transition-all text-xs"
+                      >
+                        🔄 Ya ejecuté el script (Refrescar)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex justify-between items-center mb-8">
+                    <div>
+                      <h2 className="text-2xl font-black text-white">Importar Ventas Históricas (Excel/CSV)</h2>
+                      <p className="text-gray-400 text-sm">Carga el histórico mensual de remisiones o facturas directamente desde archivos descargados de Bind ERP.</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    {/* Selector de Archivos y Estado */}
+                    <div className="lg:col-span-1 bg-white/5 rounded-3xl p-8 border border-white/10 flex flex-col gap-6 h-fit sticky top-8">
+                      <div>
+                        <h3 className="text-xl font-black">Selecciona el Reporte</h3>
+                        <p className="text-gray-500 text-xs mt-1">Soporta formatos .xls, .xlsx y .csv de Bind ERP.</p>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="relative group">
+                          <input 
+                            type="file" 
+                            accept=".csv, .xls, .xlsx"
+                            onChange={handleFileSelect}
+                            disabled={isImporting}
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10 disabled:cursor-not-allowed"
+                          />
+                          <div className={`w-full h-40 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-3 transition-all ${selectedFileName ? 'border-green-500/50 bg-green-500/5' : 'border-white/10 group-hover:border-white/20 bg-white/5'}`}>
+                            <span className="text-3xl">📊</span>
+                            {selectedFileName ? (
+                              <div className="text-center px-4">
+                                <span className="text-[11px] font-mono font-bold text-green-400 block truncate max-w-[200px]">{selectedFileName}</span>
+                                <span className="text-[9px] text-gray-500 block mt-1 uppercase font-black">Archivo Cargado ✓</span>
+                              </div>
+                            ) : (
+                              <div className="text-center">
+                                <span className="text-[10px] font-black text-gray-400 uppercase block">Arrastra o selecciona archivo</span>
+                                <span className="text-[8px] text-gray-600 font-bold uppercase mt-1 block">CSV o Excel</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {xlsParsingError && (
+                          <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-500 rounded-2xl text-xs font-semibold leading-relaxed">
+                            {xlsParsingError}
+                          </div>
+                        )}
+
+                        {importStatusMessage && (
+                          <div className={`p-4 rounded-2xl text-xs font-bold leading-relaxed border ${
+                            importStatusMessage.includes('Error') 
+                              ? 'bg-red-500/10 border-red-500/20 text-red-400' 
+                              : importStatusMessage.includes('completada') || importStatusMessage.includes('éxito')
+                                ? 'bg-green-500/10 border-green-500/20 text-green-400'
+                                : 'bg-blue-500/10 border-blue-500/20 text-blue-400'
+                          }`}>
+                            {importStatusMessage}
+                          </div>
+                        )}
+
+                        {isImporting && (
+                          <div className="space-y-2">
+                            <div className="flex justify-between text-[10px] font-black uppercase text-gray-500">
+                              <span>Progreso</span>
+                              <span>{importProgress}%</span>
+                            </div>
+                            <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden border border-white/5">
+                              <div className="bg-blue-600 h-full rounded-full transition-all duration-300" style={{ width: `${importProgress}%` }}></div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {csvRows.length > 0 && (
+                        <button 
+                          onClick={handleStartImport}
+                          disabled={isImporting}
+                          className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl hover:bg-blue-500 transition-all shadow-xl shadow-blue-900/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                          {isImporting ? (
+                            <>
+                              <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                              Importando...
+                            </>
+                          ) : (
+                            `Comenzar Carga (${csvRows.length} registros)`
+                          )}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Mapeador de Columnas */}
+                    <div className="lg:col-span-2 space-y-6">
+                      {csvHeaders.length > 0 ? (
+                        <>
+                          <div className="bg-white/5 rounded-3xl p-8 border border-white/10 space-y-6">
+                            <div>
+                              <h3 className="text-xl font-black text-white">Mapeo de Columnas de Datos</h3>
+                              <p className="text-gray-400 text-xs mt-1">El asistente ha pre-detectado las cabeceras. Verifica que correspondan correctamente a tu archivo.</p>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                              {/* Fecha */}
+                              <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">Fecha de Venta (Emisión) <span className="text-red-500">*</span></label>
+                                <select 
+                                  value={importMapping.fecha}
+                                  onChange={e => setImportMapping({...importMapping, fecha: e.target.value})}
+                                  className="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-3.5 text-xs font-bold text-white focus:outline-none focus:border-blue-500 cursor-pointer"
+                                >
+                                  <option value="">-- Selecciona columna --</option>
+                                  {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                                </select>
+                              </div>
+
+                              {/* SKU */}
+                              <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">Código de Producto / SKU <span className="text-red-500">*</span></label>
+                                <select 
+                                  value={importMapping.sku}
+                                  onChange={e => setImportMapping({...importMapping, sku: e.target.value})}
+                                  className="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-3.5 text-xs font-bold text-white focus:outline-none focus:border-blue-500 cursor-pointer"
+                                >
+                                  <option value="">-- Selecciona columna --</option>
+                                  {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                                </select>
+                              </div>
+
+                              {/* Cantidad */}
+                              <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">Cantidad de piezas (Opcional)</label>
+                                <select 
+                                  value={importMapping.cantidad || ''}
+                                  onChange={e => setImportMapping({...importMapping, cantidad: e.target.value})}
+                                  className="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-3.5 text-xs font-bold text-white focus:outline-none focus:border-blue-500 cursor-pointer"
+                                >
+                                  <option value="">Por defecto (1 unidad)</option>
+                                  {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                                </select>
+                              </div>
+
+                              {/* Total */}
+                              <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">Total de la Venta (MXN) <span className="text-red-500">*</span></label>
+                                <select 
+                                  value={importMapping.total}
+                                  onChange={e => setImportMapping({...importMapping, total: e.target.value})}
+                                  className="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-3.5 text-xs font-bold text-white focus:outline-none focus:border-blue-500 cursor-pointer"
+                                >
+                                  <option value="">-- Selecciona columna --</option>
+                                  {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                                </select>
+                              </div>
+
+                              {/* Sucursal */}
+                              <div className="space-y-2 md:col-span-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">Sucursal / Almacén Origen <span className="text-red-500">*</span></label>
+                                <select 
+                                  value={importMapping.sucursal}
+                                  onChange={e => setImportMapping({...importMapping, sucursal: e.target.value})}
+                                  className="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-3.5 text-xs font-bold text-white focus:outline-none focus:border-blue-500 cursor-pointer"
+                                >
+                                  <option value="">-- Selecciona columna --</option>
+                                  {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Vista Previa de los primeros registros */}
+                          <div className="bg-white/5 rounded-3xl p-8 border border-white/10 space-y-4">
+                            <h4 className="text-xs font-black uppercase tracking-widest text-gray-400">Vista Previa de Filas (Primeras 3 filas)</h4>
+                            <div className="overflow-x-auto border border-white/5 rounded-2xl bg-black/20">
+                              <table className="w-full text-left text-[10px] font-mono text-gray-400">
+                                <thead>
+                                  <tr className="bg-white/[0.02] border-b border-white/5 text-[9px] font-black uppercase tracking-wider text-gray-500">
+                                    {csvHeaders.slice(0, 5).map((h, i) => <th key={i} className="px-4 py-3">{h}</th>)}
+                                    {csvHeaders.length > 5 && <th className="px-4 py-3 text-gray-600">...</th>}
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                  {csvRows.slice(0, 3).map((row, rIdx) => (
+                                    <tr key={rIdx} className="hover:bg-white/[0.01]">
+                                      {csvHeaders.slice(0, 5).map((h, hIdx) => (
+                                        <td key={hIdx} className="px-4 py-2.5 truncate max-w-[120px]">{String(row[hIdx] !== undefined ? row[hIdx] : '')}</td>
+                                      ))}
+                                      {csvHeaders.length > 5 && <td className="px-4 py-2.5 text-gray-600">...</td>}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="p-12 text-center text-gray-500 bg-white/5 rounded-[2rem] border border-white/10 flex flex-col items-center justify-center min-h-[300px]">
+                          <span className="text-5xl mb-4 opacity-50">📂</span>
+                          <h3 className="text-lg font-bold text-white mb-2">Esperando archivo...</h3>
+                          <p className="text-sm text-gray-400 max-w-sm">Selecciona o arrastra el archivo de Excel o CSV exportado desde Bind ERP en el panel de la izquierda para comenzar el mapeo de columnas.</p>
+                        </div>
+                      )}
+
+                      {/* Advertencias y errores de formato */}
+                      {importErrors.length > 0 && (
+                        <div className="bg-red-500/5 border border-red-500/10 rounded-3xl p-6 space-y-3">
+                          <h4 className="text-xs font-black uppercase tracking-widest text-red-400 flex items-center gap-1.5">
+                            <span>⚠️</span> Advertencias y Errores de Validación ({importErrors.length})
+                          </h4>
+                          <div className="max-h-36 overflow-y-auto text-[10px] font-mono text-red-300 space-y-1.5 custom-scrollbar pr-2">
+                            {importErrors.map((err, i) => <div key={i}>{err}</div>)}
+                          </div>
                         </div>
                       )}
                     </div>

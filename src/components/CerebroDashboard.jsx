@@ -95,7 +95,8 @@ const CerebroDashboard = () => {
   const currentLowStock = currentInventory.filter(item => item.stock > 0 && item.stock <= 10);
 
   // --- BUSCADOR IA (Gemini Parser) ---
-  const handleAISearch = (queryText) => {
+  // --- BUSCADOR IA (Gemini Parser) ---
+  const handleAISearch = async (queryText) => {
     const query = (queryText || searchQuery).trim().toLowerCase();
     if (!query) return;
 
@@ -107,10 +108,184 @@ const CerebroDashboard = () => {
       setSearchQuery(queryText);
     }
 
-    setTimeout(() => {
+    // Usamos un pequeño delay para simular procesamiento de IA
+    setTimeout(async () => {
       let response = { text: '', type: 'general', data: null };
 
-      if (query.includes('agotar') || query.includes('bajo stock') || query.includes('alerta') || query.includes('critico') || query.includes('bajo')) {
+      // Detectar si la pregunta se refiere a históricos de ventas (junio 2026, Querétaro, total vendimos, etc.)
+      const isHistorical = query.includes('histórico') || query.includes('historico') || 
+                            query.includes('2025') || query.includes('2026') ||
+                            query.includes('enero') || query.includes('febrero') || query.includes('marzo') ||
+                            query.includes('abril') || query.includes('mayo') || query.includes('junio') ||
+                            query.includes('julio') || query.includes('agosto') || query.includes('septiembre') ||
+                            query.includes('octubre') || query.includes('noviembre') || query.includes('diciembre') ||
+                            query.includes('cuanto vendi') || query.includes('cuánto vendi') ||
+                            query.includes('vendimos') || query.includes('ventas de') || query.includes('movimiento');
+
+      if (isHistorical) {
+        try {
+          // Detectar año
+          let year = 2026; // Año por defecto en datos cargados
+          if (query.includes('2025')) year = 2025;
+          if (query.includes('2026')) year = 2026;
+
+          // Detectar mes
+          let month = -1;
+          const months = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+          months.forEach((m, idx) => {
+            if (query.includes(m)) {
+              month = idx;
+            }
+          });
+
+          // Detectar sucursal / almacén
+          let filterBranch = null;
+          let displayBranch = '';
+          if (query.includes('celaya')) {
+            filterBranch = 'Celaya';
+            displayBranch = 'Celaya';
+          } else if (query.includes('san juan') || query.includes('sjr')) {
+            filterBranch = 'San Juan del Río';
+            displayBranch = 'San Juan del Río';
+          } else if (query.includes('queretaro') || query.includes('querétaro') || query.includes('capital') || query.includes('riviera') || query.includes('plaza riviera')) {
+            filterBranch = 'Plaza Riviera Tienda';
+            displayBranch = 'Querétaro Capital';
+          }
+
+          // Detectar SKU en catálogo
+          const matchedItem = data.inventario.find(item => 
+            item.sku && query.includes(item.sku.toLowerCase())
+          );
+          const filterSku = matchedItem ? matchedItem.sku : null;
+
+          // Crear consulta a Supabase
+          let queryBuilder = supabase.from('ventas_sucursales').select('*');
+
+          // Filtrar por fecha
+          if (month !== -1) {
+            const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+            const lastDay = new Date(year, month + 1, 0).getDate();
+            const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+            queryBuilder = queryBuilder.gte('fecha', startDate).lte('fecha', endDate);
+          } else {
+            queryBuilder = queryBuilder.gte('fecha', `${year}-01-01`).lte('fecha', `${year}-12-31`);
+          }
+
+          if (filterBranch) {
+            queryBuilder = queryBuilder.eq('sucursal', filterBranch);
+          }
+
+          if (filterSku) {
+            queryBuilder = queryBuilder.eq('sku', filterSku);
+          }
+
+          const { data: sales, error } = await queryBuilder;
+
+          if (error) {
+            console.error("Error fetching historical sales:", error);
+            response = {
+              type: 'general',
+              text: `Lo siento, ocurrió un error al consultar el histórico de ventas en la base de datos: **${error.message}**. Asegúrate de haber ejecutado el script SQL de la tabla \`ventas_sucursales\` en el editor de Supabase.`
+            };
+          } else if (!sales || sales.length === 0) {
+            let filterDesc = '';
+            if (filterBranch) filterDesc += ` en sucursal **${displayBranch}**`;
+            if (filterSku) filterDesc += ` para el producto SKU **${filterSku}**`;
+            const monthName = month !== -1 ? months[month] : 'todo el año';
+
+            response = {
+              type: 'general',
+              text: `He analizado la base de datos histórica y **no encontré registros de ventas** para **${monthName} de ${year}**${filterDesc}.\n\n💡 *Tip: Puedes subir tu reporte de facturación en la pestaña "Importar Ventas" en el Panel de Control.*`
+            };
+          } else {
+            // Agregaciones
+            const totalSalesVal = sales.reduce((acc, s) => acc + parseFloat(s.total || 0), 0);
+            const totalItemsSold = sales.reduce((acc, s) => acc + parseInt(s.cantidad || 0, 10), 0);
+
+            // Agrupar por SKU
+            const skuTotals = {};
+            sales.forEach(s => {
+              skuTotals[s.sku] = (skuTotals[s.sku] || 0) + parseInt(s.cantidad || 0, 10);
+            });
+
+            const sortedSkus = Object.entries(skuTotals).sort((a, b) => b[1] - a[1]);
+            const topSku = sortedSkus[0] ? sortedSkus[0][0] : 'N/A';
+            const topSkuCount = sortedSkus[0] ? sortedSkus[0][1] : 0;
+
+            const topSkuItem = data.inventario.find(item => item.sku === topSku);
+            let topSkuName = topSku;
+            if (topSkuItem) {
+              const corte = data.cortes.find(c => c.id === topSkuItem.corte_id)?.nombre || 'Playera';
+              const color = data.colores.find(c => c.id === topSkuItem.color_id)?.nombre || '';
+              topSkuName = `${corte} ${color} (${topSkuItem.talla}) [${topSku}]`;
+            }
+
+            // Agrupar por sucursal
+            const branchTotals = {};
+            sales.forEach(s => {
+              const bName = s.sucursal === 'Plaza Riviera Tienda' ? 'Querétaro Capital' : s.sucursal;
+              branchTotals[bName] = (branchTotals[bName] || 0) + parseFloat(s.total || 0);
+            });
+
+            let breakdownText = '';
+            Object.entries(branchTotals).forEach(([br, tot]) => {
+              breakdownText += `* **${br}**: $${tot.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN\n`;
+            });
+
+            let mainText = '';
+            const monthText = month !== -1 ? `${months[month].toUpperCase()} de ${year}` : `${year}`;
+
+            if (filterSku) {
+              const item = data.inventario.find(i => i.sku === filterSku);
+              const corte = item ? (data.cortes.find(c => c.id === item.corte_id)?.nombre || '') : '';
+              const color = item ? (data.colores.find(c => c.id === item.color_id)?.nombre || '') : '';
+              mainText = `Consultando el movimiento de ventas de **${corte} ${color} [SKU: ${filterSku}]** para **${monthText}**:\n\n` +
+                         `* **Total de unidades vendidas:** ${totalItemsSold} piezas\n` +
+                         `* **Facturación total generada:** $${totalSalesVal.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN\n` +
+                         (filterBranch ? `* **Sucursal auditada:** ${displayBranch}\n` : `* **Desglose por sucursal:**\n${breakdownText}`);
+            } else if (filterBranch) {
+              mainText = `Auditoría financiera histórica para **${displayBranch}** en **${monthText}**:\n\n` +
+                         `* **Facturación Total:** $${totalSalesVal.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN\n` +
+                         `* **Piezas desplazadas:** ${totalItemsSold} unidades\n` +
+                         `* **Producto estrella:** ${topSkuName} (${topSkuCount} pzs sold)\n` +
+                         `* **Transacciones registradas:** ${sales.length} ventas`;
+            } else {
+              mainText = `Reporte global de ventas consolidado para **${monthText}** (todas las sucursales):\n\n` +
+                         `* **Facturación Total Bruta:** **$${totalSalesVal.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN**\n` +
+                         `* **Volumen Físico Desplazado:** ${totalItemsSold} piezas\n` +
+                         `* **Sucursal Líder:** ${Object.entries(branchTotals).sort((a,b) => b[1] - a[1])[0]?.[0] || 'N/A'}\n` +
+                         `* **Modelo con mayor rotación:** ${topSkuName} (${topSkuCount} pzs)\n\n` +
+                         `**Desglose de Ventas por Sucursal:**\n${breakdownText}`;
+            }
+
+            response = {
+              type: 'sales_historical',
+              text: mainText,
+              data: sales.slice(0, 15).map(s => {
+                const item = data.inventario.find(i => i.sku === s.sku);
+                const corte = item ? (data.cortes.find(c => c.id === item.corte_id)?.nombre || 'Playera') : 'Variante';
+                const color = item ? (data.colores.find(c => c.id === item.color_id)?.nombre || 'N/A') : 'N/A';
+                const talla = item ? item.talla : 'N/A';
+                return {
+                  id: s.id,
+                  corte: `${corte} - ${color}`,
+                  talla: talla,
+                  sku: s.sku,
+                  stock: s.cantidad,
+                  sucursal: s.sucursal === 'Plaza Riviera Tienda' ? 'Querétaro Capital' : s.sucursal,
+                  total: s.total
+                };
+              })
+            };
+          }
+        } catch (dbErr) {
+          console.error("Database query failed:", dbErr);
+          response = {
+            type: 'general',
+            text: `No se pudo procesar la consulta histórica. Asegúrate de tener conexión con Supabase y que la estructura exista.`
+          };
+        }
+      } else if (query.includes('agotar') || query.includes('bajo stock') || query.includes('alerta') || query.includes('critico') || query.includes('bajo')) {
         const items = data.inventario
           .filter(item => item.stock > 0 && item.stock <= 10)
           .slice(0, 10)
@@ -162,7 +337,7 @@ const CerebroDashboard = () => {
       } else if (query.includes('hola') || query.includes('saludo') || query.includes('ayuda') || query.includes('como funciona')) {
         response = {
           type: 'general',
-          text: `¡Hola! Soy **El Cerebro Inteligente de Analytics** de creativity.mx.\n\nEstoy conectado mediante tuberías de datos directas con tu base de datos de **Supabase** y la API de **Bind ERP**. Puedo ayudarte a responder consultas analíticas de inmediato. Prueba preguntándome:\n\n* *¿Qué productos están por agotarse?*\n* *Muéstrame el reporte de ventas.*\n* *¿Qué playeras no tienen existencias?*`
+          text: `¡Hola! Soy **El Cerebro Inteligente de Analytics** de creativity.mx.\n\nEstoy conectado mediante tuberías de datos directas con tu base de datos de **Supabase** y la API de **Bind ERP**. Puedo ayudarte a responder consultas analíticas de inmediato. Prueba preguntándome:\n\n* *¿Cuánto vendimos en total en Querétaro Capital en junio de 2026?*\n* *¿Qué productos están por agotarse?*\n* *Muéstrame el reporte de ventas.*\n* *¿Qué playeras no tienen existencias?*`
         };
       } else {
         response = {
@@ -461,25 +636,37 @@ const CerebroDashboard = () => {
             </p>
             
             {/* Tabla Dinámica de Resultados */}
-            {(aiResponse.type === 'low_stock' || aiResponse.type === 'out_of_stock') && aiResponse.data && (
+            {(aiResponse.type === 'low_stock' || aiResponse.type === 'out_of_stock' || aiResponse.type === 'sales_historical') && aiResponse.data && (
               <div className="overflow-x-auto border border-white/5 rounded-2xl relative z-10 shadow-inner">
                 <table className="w-full text-left text-xs text-gray-300">
                   <thead>
                     <tr className="bg-white/[0.03] border-b border-white/5 text-[10px] font-black uppercase tracking-widest text-gray-400">
                       <th className="px-5 py-4">Variante (Corte / Color)</th>
                       <th className="px-5 py-4 text-center">Talla</th>
-                      <th className="px-5 py-4">SKU</th>
-                      <th className="px-5 py-4 text-right">Existencias</th>
+                      <th className="px-5 py-4">{aiResponse.type === 'sales_historical' ? 'Sucursal' : 'SKU'}</th>
+                      <th className="px-5 py-4 text-right">{aiResponse.type === 'sales_historical' ? 'Vendidos / Total' : 'Existencias'}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5 font-mono">
-                    {aiResponse.data.map(item => (
-                      <tr key={item.id} className="hover:bg-white/[0.01] transition-all">
-                        <td className="px-5 py-3.5 font-sans font-bold text-white">{item.corte} - {item.color}</td>
+                    {aiResponse.data.map((item, idx) => (
+                      <tr key={item.id || idx} className="hover:bg-white/[0.01] transition-all">
+                        <td className="px-5 py-3.5 font-sans font-bold text-white">
+                          {aiResponse.type === 'sales_historical' ? item.corte : `${item.corte} - ${item.color}`}
+                        </td>
                         <td className="px-5 py-3.5 text-center text-cyan-400 font-bold">{item.talla}</td>
-                        <td className="px-5 py-3.5 text-gray-400">{item.sku}</td>
-                        <td className={`px-5 py-3.5 text-right font-black ${item.stock === 0 ? 'text-red-500 bg-red-500/5' : 'text-orange-400 bg-orange-500/5'}`}>
-                          {item.stock} pz
+                        <td className="px-5 py-3.5 text-gray-400">
+                          {aiResponse.type === 'sales_historical' ? item.sucursal : item.sku}
+                        </td>
+                        <td className={`px-5 py-3.5 text-right font-black ${
+                          aiResponse.type === 'sales_historical'
+                            ? 'text-green-400 bg-green-500/5'
+                            : item.stock === 0 
+                              ? 'text-red-500 bg-red-500/5' 
+                              : 'text-orange-400 bg-orange-500/5'
+                        }`}>
+                          {aiResponse.type === 'sales_historical' 
+                            ? `${item.stock} pz ($${parseFloat(item.total).toLocaleString('es-MX', { minimumFractionDigits: 2 })})` 
+                            : `${item.stock} pz`}
                         </td>
                       </tr>
                     ))}
