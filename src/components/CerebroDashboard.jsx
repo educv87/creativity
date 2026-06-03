@@ -62,6 +62,17 @@ const CerebroDashboard = () => {
     new Set((data.inventarioAlmacenes || []).map(a => a.almacen_nombre))
   ).filter(name => name).sort();
 
+  const getWarehouseStock = (wName) => {
+    return (data.inventarioAlmacenes || [])
+      .filter(a => a.almacen_nombre === wName)
+      .reduce((sum, item) => sum + (item.stock || 0), 0);
+  };
+
+  const formatWarehouseName = (name) => {
+    if (name === 'Plaza Riviera Tienda') return 'Querétaro Capital';
+    return name;
+  };
+
   // Sucursales y Almacenes (Carga real desde inventario_almacenes en Supabase)
   const getBranchInventory = (branch) => {
     if (branch === 'all') return data.inventario;
@@ -187,9 +198,10 @@ const CerebroDashboard = () => {
     // Definición de Nodos de la Red Neuronal
     const nodes = [
       { id: 1, label: 'Cerebro Central', val: 'Analizador IA', x: 230, y: 150, radius: 24, color: '#a855f7', glow: 'rgba(168,85,247,0.4)', detail: 'Centraliza existencias y despacha predicciones logísticas mediante IA.' },
-      { id: 2, label: 'Almacén Central', val: `${Math.round(totalItemsCount * 0.6)} var.`, x: 80, y: 220, radius: 20, color: '#3b82f6', glow: 'rgba(59,130,246,0.3)', detail: 'Bodega de stock principal. Abastece compras web y traslados.' },
-      { id: 3, label: 'Sucursal Zamora', val: `${Math.round(totalItemsCount * 0.25)} var.`, x: 380, y: 220, radius: 18, color: '#10b981', glow: 'rgba(16,185,129,0.3)', detail: 'Punto de venta físico y almacén secundario de distribución.' },
-      { id: 4, label: 'Sucursal Querétaro', val: `${Math.round(totalItemsCount * 0.15)} var.`, x: 350, y: 80, radius: 18, color: '#06b6d4', glow: 'rgba(6,182,212,0.3)', detail: 'Centro Logístico regional norte y tienda física.' },
+      { id: 2, label: 'CEDIS', val: getWarehouseStock('CEDIS') + ' pz', x: 80, y: 220, radius: 20, color: '#3b82f6', glow: 'rgba(59,130,246,0.3)', detail: 'Bodega de stock principal (Celaya). Abastece compras web y traslados.' },
+      { id: 3, label: 'Celaya', val: getWarehouseStock('Celaya') + ' pz', x: 380, y: 220, radius: 18, color: '#10b981', glow: 'rgba(16,185,129,0.3)', detail: 'Sucursal física en Celaya. Punto de venta y atención directa.' },
+      { id: 4, label: 'Querétaro Capital', val: getWarehouseStock('Plaza Riviera Tienda') + ' pz', x: 350, y: 80, radius: 18, color: '#06b6d4', glow: 'rgba(6,182,212,0.3)', detail: 'Sucursal física Plaza Riviera en Querétaro Capital.' },
+      { id: 8, label: 'San Juan del Río', val: getWarehouseStock('San Juan del Río') + ' pz', x: 380, y: 150, radius: 18, color: '#eab308', glow: 'rgba(234,179,8,0.3)', detail: 'Sucursal física y centro logístico en San Juan del Río.' },
       { id: 5, label: 'Ventas Web', val: `$${Math.round(totalRevenue / 1000)}k`, x: 100, y: 80, radius: 20, color: '#ec4899', glow: 'rgba(236,72,153,0.3)', detail: `Pedidos completados online: ${paidOrdersCount} órdenes procesadas con éxito.` },
       { id: 6, label: 'Mercado Pago', val: 'Pasarela OK', x: 230, y: 260, radius: 16, color: '#f59e0b', glow: 'rgba(245,158,11,0.3)', detail: 'Estado de pasarela: Activa y en funcionamiento. 0 fallos recientes.' },
       { id: 7, label: 'Skydropx', val: 'Envíos OK', x: 230, y: 40, radius: 16, color: '#6366f1', glow: 'rgba(99,102,241,0.3)', detail: 'Integración de paqueterías: Conexión estable. Guías automáticas emitidas.' }
@@ -200,12 +212,14 @@ const CerebroDashboard = () => {
       { from: 1, to: 2 },
       { from: 1, to: 3 },
       { from: 1, to: 4 },
+      { from: 1, to: 8 },
       { from: 1, to: 5 },
       { from: 1, to: 6 },
       { from: 1, to: 7 },
       { from: 2, to: 5 },
       { from: 3, to: 6 },
-      { from: 4, to: 7 }
+      { from: 4, to: 7 },
+      { from: 8, to: 6 }
     ];
 
     // Partículas fluyendo en las conexiones
@@ -531,7 +545,7 @@ const CerebroDashboard = () => {
               >
                 <option value="all">Consolidado general</option>
                 {warehouseNames.map(name => (
-                  <option key={name} value={name}>{name}</option>
+                  <option key={name} value={name}>{formatWarehouseName(name)}</option>
                 ))}
               </select>
             </div>
