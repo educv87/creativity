@@ -7,9 +7,9 @@ const CerebroDashboard = () => {
   const navigate = useNavigate();
   const canvasRef = useRef(null);
   const [loading, setLoading] = useState(true);
-  const [data, setData] = useState({ cortes: [], colores: [], inventario: [], escalas: [] });
+  const [data, setData] = useState({ cortes: [], colores: [], inventario: [], inventarioAlmacenes: [], escalas: [] });
   const [orders, setOrders] = useState([]);
-  const [activeBranch, setActiveBranch] = useState('all'); // 'all' | 'central' | 'zamora' | 'queretaro'
+  const [activeBranch, setActiveBranch] = useState('all');
   
   // AI Search states
   const [searchQuery, setSearchQuery] = useState('');
@@ -57,13 +57,25 @@ const CerebroDashboard = () => {
   
   const paidOrdersCount = orders.filter(o => o.status === 'pagado').length;
 
-  // Sucursales y Almacenes (Distribución ponderada para simulación lógica en la UI)
+  // Obtener los nombres de los almacenes únicos disponibles de la base de datos
+  const warehouseNames = Array.from(
+    new Set((data.inventarioAlmacenes || []).map(a => a.almacen_nombre))
+  ).filter(name => name).sort();
+
+  // Sucursales y Almacenes (Carga real desde inventario_almacenes en Supabase)
   const getBranchInventory = (branch) => {
     if (branch === 'all') return data.inventario;
-    const seed = branch === 'central' ? 0.6 : branch === 'zamora' ? 0.25 : 0.15;
+    
+    const branchStockMap = {};
+    (data.inventarioAlmacenes || []).forEach(almItem => {
+      if (almItem.almacen_nombre === branch) {
+        branchStockMap[almItem.inventario_id] = almItem.stock;
+      }
+    });
+
     return data.inventario.map(item => ({
       ...item,
-      stock: Math.max(0, Math.round(item.stock * seed))
+      stock: branchStockMap[item.id] !== undefined ? branchStockMap[item.id] : 0
     }));
   };
 
@@ -518,9 +530,9 @@ const CerebroDashboard = () => {
                 className="bg-slate-950 border border-white/10 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none focus:border-purple-500 text-white cursor-pointer"
               >
                 <option value="all">Consolidado general</option>
-                <option value="central">Almacén Central (60%)</option>
-                <option value="zamora">Sucursal Zamora (25%)</option>
-                <option value="queretaro">Sucursal Querétaro (15%)</option>
+                {warehouseNames.map(name => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
               </select>
             </div>
 

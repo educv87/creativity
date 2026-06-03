@@ -53,11 +53,21 @@ export const fetchProjectData = async (skipBind = true) => {
       }
     }
 
+    // Consultar existencias por almacén
+    let inventarioAlmacenesData = [];
+    try {
+      const { data: almData } = await supabase.from('inventario_almacenes').select('*');
+      inventarioAlmacenesData = almData || [];
+    } catch (almErr) {
+      console.error("Error fetching inventario_almacenes:", almErr);
+    }
+
     return {
       cortes: cortesData || [],
       colores: coloresData || [],
       relations: relationsData || [],
       inventario: inventarioData || [],
+      inventarioAlmacenes: inventarioAlmacenesData,
       escalas: escalasData || [],
       escalasError: escalasError ? escalasError.message : null
     };
