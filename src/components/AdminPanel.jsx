@@ -279,8 +279,8 @@ const AdminPanel = () => {
       }
       
       // Clean and parse quantity
-      const cantStr = String(rawCant || '1').replace(/[^0-9\-]/g, '');
-      const cantidad = parseInt(cantStr, 10) || 1;
+      const cantStr = String(rawCant || '1').replace(/[^0-9\.\-]/g, '');
+      const cantidad = Math.round(parseFloat(cantStr)) || 1;
       
       // Clean and parse total (removes $, commas, etc.)
       const totalStr = String(rawTotal || '0').replace(/[^0-9\.\-]/g, '');
@@ -344,6 +344,20 @@ const AdminPanel = () => {
     
     // Reload database states
     loadAllData();
+  };
+
+  const handleClearHistory = async () => {
+    if (window.confirm("¿Seguro que deseas eliminar TODOS los registros del histórico de ventas? Esta acción no se puede deshacer y borrará los datos actuales para que puedas volver a subir el archivo corregido.")) {
+      setLoading(true);
+      const { error } = await supabase.from('ventas_sucursales').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      if (error) {
+        alert("Error al limpiar historial: " + error.message);
+      } else {
+        alert("Historial de ventas eliminado correctamente.");
+        loadAllData();
+      }
+      setLoading(false);
+    }
   };
 
   const handleCreateObjective = async () => {
@@ -1610,11 +1624,18 @@ WITH CHECK (true);`}
                 </div>
               ) : (
                 <>
-                  <div className="flex justify-between items-center mb-8">
+                  <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 mb-8">
                     <div>
                       <h2 className="text-2xl font-black text-white">Importar Ventas Históricas (Excel/CSV)</h2>
                       <p className="text-gray-400 text-sm">Carga el histórico mensual de remisiones o facturas directamente desde archivos descargados de Bind ERP.</p>
                     </div>
+                    <button
+                      onClick={handleClearHistory}
+                      disabled={isImporting}
+                      className="px-5 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-xs font-bold hover:bg-red-500 hover:text-white transition-all w-fit disabled:opacity-50 shrink-0"
+                    >
+                      🗑️ Limpiar Historial de Ventas
+                    </button>
                   </div>
 
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
