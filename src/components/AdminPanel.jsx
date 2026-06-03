@@ -512,6 +512,12 @@ const AdminPanel = () => {
               Ver Tienda
             </button>
             <button 
+              onClick={() => navigate('/cerebro')}
+              className="px-6 py-2.5 rounded-full bg-purple-600 border border-purple-500/20 text-white text-sm font-bold hover:bg-purple-500 transition-all flex items-center gap-1.5 shadow-lg shadow-purple-500/10"
+            >
+              🧠 El Cerebro
+            </button>
+            <button 
               onClick={handleLogout}
               className="px-6 py-2.5 rounded-full bg-red-500/10 border border-red-500/20 text-red-500 text-sm font-bold hover:bg-red-500 hover:text-white transition-all"
             >
