@@ -62,7 +62,7 @@ const AdminLogin = () => {
           <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-black font-black text-3xl mb-4 shadow-2xl shadow-white/10">
             C
           </div>
-          <h1 className="text-3xl font-black text-white tracking-tight">Creativity.</h1>
+          <h1 className="text-3xl font-black text-white tracking-tight">creativity.mx</h1>
           <p className="text-gray-500 font-medium text-sm mt-1 uppercase tracking-widest">Admin Access</p>
         </div>
 

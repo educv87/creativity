@@ -119,7 +119,7 @@ const StorytellingSection = () => {
             Las playeras de sublimación ahora tienen <span className={`transition-colors duration-1000 ${activeHeadingColor}`}>color.</span>
           </h2>
           <p className="text-xl md:text-2xl text-gray-500 font-medium max-w-3xl mx-auto mb-10">
-            Tus diseños merecen más que un lienzo aburrido. Las playeras Creativity le dan color y vida a tu marca desde el primer hilo.
+            Tus diseños merecen más que un lienzo aburrido. Las playeras creativity.mx le dan color y vida a tu marca desde el primer hilo.
           </p>
           <CreateOrderBtn />
         </div>
@@ -417,7 +417,7 @@ const StorytellingSection = () => {
                   ¿Garantía de cambio?
                 </h4>
                 <p className="text-gray-500 font-medium leading-relaxed">
-                  En Creativity cuidamos cada costura. Si recibes una prenda con defecto de fábrica, solo envíanos una foto y procesamos el cambio o reposición en tu siguiente compra.
+                  En creativity.mx cuidamos cada costura. Si recibes una prenda con defecto de fábrica, solo envíanos una foto y procesamos el cambio o reposición en tu siguiente compra.
                 </p>
               </div>
             </div>

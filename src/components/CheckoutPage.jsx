@@ -607,7 +607,7 @@ const CheckoutPage = () => {
             
             <div className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm">
               <p className="text-xs text-gray-600 leading-relaxed">
-                <span className="font-bold text-gray-900">Playeras 100% poliéster</span> recomendada para una sublimación de alta calidad. En <span className="text-gray-900 font-black">Creativity</span> cuidamos la calidad de nuestras telas y las costuras para que puedas entregar un producto creativo, duradero y usable a tus clientes.
+                <span className="font-bold text-gray-900">Playeras 100% poliéster</span> recomendada para una sublimación de alta calidad. En <span className="text-gray-900 font-black">creativity.mx</span> cuidamos la calidad de nuestras telas y las costuras para que puedas entregar un producto creativo, duradero y usable a tus clientes.
               </p>
             </div>
           </div>

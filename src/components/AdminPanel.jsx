@@ -341,61 +341,27 @@ const AdminPanel = () => {
 
     setIsSyncing(true);
     try {
-      const bindData = await fetchBindInventory();
+      // Invocar la Edge Function usando método POST para ejecutar la sincronización del lado del servidor
+      const { data: resData, error: invokeError } = await supabase.functions.invoke('bind-inventory', {
+        method: 'POST'
+      });
 
-      if (!bindData || !bindData.success) {
+      if (invokeError) throw invokeError;
+
+      if (!resData || !resData.success) {
         throw new Error('Error al conectar con la API de Bind ERP a través de la Edge Function.');
       }
 
-      const bindProds = bindData.products || [];
-      setBindProducts(bindProds);
-
-      if (bindProds.length === 0) {
-        alert('No se encontraron productos en tu cuenta de Bind ERP.');
-        setIsSyncing(false);
-        return;
+      const syncCount = resData.syncCount || 0;
+      
+      // Actualizar la lista local de productos de Bind ERP si se retornaron
+      if (resData.products) {
+        setBindProducts(resData.products);
       }
 
-      const bindStockMap = {};
-      bindProds.forEach(p => {
-        const key = (p.SKU || p.Code || '').trim();
-        if (key) {
-          bindStockMap[key] = p.CurrentInventory;
-        }
-      });
-
-      let syncCount = 0;
-      let hasError = false;
-      let missingSkuColumn = false;
-
-      for (const item of data.inventario) {
-        const itemSku = (editDraft[item.id]?.sku || item.sku || '').trim();
-        if (itemSku && bindStockMap[itemSku] !== undefined) {
-          const bindStock = bindStockMap[itemSku];
-          if (item.stock !== bindStock) {
-            const { error } = await updateStock(item.id, bindStock);
-            if (error) {
-              if (error.code === '42703' || (error.message && (error.message.includes('sku') || error.message.includes('column') || error.message.includes('columna')))) {
-                missingSkuColumn = true;
-              }
-              hasError = true;
-            } else {
-              handleDraftChange(item.id, 'stock', bindStock);
-              syncCount++;
-            }
-          }
-        }
-      }
-
-      if (missingSkuColumn) {
-        setShowMigrationModal(true);
-      } else if (hasError) {
-        alert('Se sincronizaron algunos productos, pero hubo errores de red al guardar otros.');
-        await loadAllData();
-      } else {
-        alert(`Sincronización completada. Se actualizaron ${syncCount} variantes de inventario con los niveles de stock de Bind ERP.`);
-        await loadAllData();
-      }
+      alert(`Sincronización completada. Se actualizaron ${syncCount} variantes de inventario con los niveles de stock de Bind ERP.`);
+      await loadAllData();
+      
     } catch (e) {
       alert(e.message || 'Error durante la sincronización.');
     }

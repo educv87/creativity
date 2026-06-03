@@ -31,7 +31,7 @@ const HeroCover = () => {
       {/* Hero Content */}
       <div className="relative z-10 text-center px-4 max-w-4xl mx-auto transform transition-transform duration-1000 translate-y-0 opacity-100">
         <h1 className="text-5xl sm:text-7xl font-extrabold text-white tracking-tight drop-shadow-lg mb-6">
-          Creativity <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-fuchsia-400">Pro</span>
+          creativity.mx <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-fuchsia-400">Pro</span>
         </h1>
         <p className="text-xl sm:text-2xl text-gray-200 font-medium drop-shadow-md mb-10 max-w-2xl mx-auto leading-relaxed">
           Sistema de Pedidos Ágil y Mayorista. Acelera tu producción con calidad premium.

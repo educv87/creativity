@@ -10,20 +10,31 @@ const SuccessPage = () => {
 
   useEffect(() => {
     if (orderId) {
-      // Actualizar estatus de la orden a 'pagado' y crear envío en Skydropx
+      // Actualizar estatus de la orden a 'pagado', crear envío en Skydropx y enviar correo
       const finalizeOrder = async () => {
         try {
           // 1. Marcar como pagado
-          await supabase
+          const { error: updateError } = await supabase
             .from('ordenes')
             .update({ status: 'pagado' })
             .eq('id', orderId);
           
+          if (updateError) throw updateError;
+          
           // 2. Crear guía preautorizada en Skydropx
           const { createShipment } = await import('../lib/shipping');
           await createShipment(orderId);
+
+          // 3. Enviar correo de confirmación (Llamando a la Edge Function)
+          try {
+            await supabase.functions.invoke('send-order-email', {
+              body: { order_id: orderId }
+            });
+          } catch (emailError) {
+            console.error("Error enviando correo de confirmación:", emailError);
+          }
           
-          // 3. Registrar evento de conversión exitosa
+          // 4. Registrar evento de conversión exitosa
           trackEvent('pago_exitoso', { orderId });
           
         } catch (error) {

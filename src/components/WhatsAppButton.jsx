@@ -1,8 +1,8 @@
 import React from 'react';
 
 const WhatsAppButton = () => {
-  const phoneNumber = "521234567890"; // Reemplazar con el número real de Creativity
-  const message = encodeURIComponent("¡Hola! Tengo una duda sobre las playeras de Creativity.");
+  const phoneNumber = "521234567890"; // Reemplazar con el número real de creativity.mx
+  const message = encodeURIComponent("¡Hola! Tengo una duda sobre las playeras de creativity.mx.");
   const whatsappUrl = `https://wa.me/${phoneNumber}?text=${message}`;
 
   return (

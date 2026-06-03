@@ -58,6 +58,7 @@ import SuccessPage from './components/SuccessPage';
 import FeedbackWidget from './components/FeedbackWidget';
 import PromotionBanner from './components/PromotionBanner';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
+import CerebroDashboard from './components/CerebroDashboard';
 
 function App() {
   return (
@@ -70,6 +71,7 @@ function App() {
         <Route path="/login" element={<AdminLogin />} />
         <Route path="/pago-exitoso" element={<SuccessPage />} />
         <Route path="/admin-analitica" element={<AnalyticsDashboard />} />
+        <Route path="/cerebro" element={<CerebroDashboard />} />
       </Routes>
       <FeedbackWidget />
     </Router>
