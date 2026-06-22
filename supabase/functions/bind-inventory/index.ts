@@ -50,12 +50,15 @@ serve(async (req) => {
     }
     console.log(`Consulta completada. Se encontraron ${products.length} productos en Bind ERP.`);
 
-    const inventoryMap: Record<string, number> = {};
+    const inventoryMap: Record<string, { id: string; stock: number }> = {};
     if (products.length > 0) {
       for (const product of products) {
         const key = (product.SKU || product.Code || '').trim();
         if (key) {
-          inventoryMap[key] = product.CurrentInventory || 0;
+          inventoryMap[key] = {
+            id: product.ID,
+            stock: product.CurrentInventory || 0
+          };
         }
       }
     }
@@ -84,29 +87,91 @@ serve(async (req) => {
       localInventory = invData || [];
       console.log(`Se encontraron ${localInventory.length} variantes locales en Supabase.`);
 
-      console.log("Comparando y actualizando diferencias de existencias...");
+      // Identificar cuáles productos locales tienen SKU y coinciden con Bind ERP
+      const matchedItems: any[] = [];
       for (const item of localInventory) {
         const sku = (item.sku || '').trim();
         if (sku && inventoryMap[sku] !== undefined) {
-          const bindStock = inventoryMap[sku];
-          if (item.stock !== bindStock) {
-            console.log(`Actualizando SKU ${sku} (ID: ${item.id}): Local DB ${item.stock} -> Bind ERP ${bindStock}`);
-            
-            const { error: updateError } = await supabase
-              .from('inventario')
-              .update({ stock: bindStock })
-              .eq('id', item.id);
-
-            if (updateError) {
-              console.error(`Error actualizando item ${item.id} (SKU: ${sku}):`, updateError.message);
-            } else {
-              syncCount++;
-              updatedItemsList.push({ id: item.id, sku, oldStock: item.stock, newStock: bindStock });
-            }
-          }
+          matchedItems.push({
+            id: item.id,
+            sku: sku,
+            oldStock: item.stock,
+            bindId: inventoryMap[sku].id,
+            bindStock: inventoryMap[sku].stock
+          });
         }
       }
-      console.log(`Sincronización finalizada. Se actualizaron ${syncCount} variantes de inventario.`);
+
+      console.log(`Iniciando sincronización detallada por almacén para ${matchedItems.length} variantes coincidentes...`);
+
+      // Procesar consultas detalladas en lotes paralelos (concurrencia = 5) para optimizar rendimiento
+      const concurrencyLimit = 5;
+      for (let i = 0; i < matchedItems.length; i += concurrencyLimit) {
+        const batch = matchedItems.slice(i, i + concurrencyLimit);
+        
+        await Promise.all(batch.map(async (item) => {
+          try {
+            // Consultar detalle individual del producto en Bind ERP
+            const detailResponse = await fetch(`https://api.bind.com.mx/api/Products/${item.bindId}`, {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${BIND_TOKEN}`,
+                'Accept': 'application/json'
+              }
+            });
+
+            if (detailResponse.ok) {
+              const detailData = await detailResponse.json();
+              const inventories = detailData.Inventories || [];
+
+              // 1. Limpiar los registros anteriores de almacenes para esta variante
+              await supabase
+                .from('inventario_almacenes')
+                .delete()
+                .eq('inventario_id', item.id);
+
+              // 2. Si tiene inventario detallado por almacén, guardarlos
+              if (inventories.length > 0) {
+                const recordsToInsert = inventories.map((inv: any) => ({
+                  inventario_id: item.id,
+                  almacen_nombre: (inv.WarehouseName || '').trim(),
+                  stock: inv.Inventory || 0
+                }));
+
+                const { error: insertError } = await supabase
+                  .from('inventario_almacenes')
+                  .insert(recordsToInsert);
+
+                if (insertError) {
+                  console.error(`Error guardando existencias por almacén para SKU ${item.sku}:`, insertError.message);
+                }
+              }
+
+              // 3. Si el stock consolidado cambió, actualizar la tabla principal 'inventario'
+              if (item.oldStock !== item.bindStock) {
+                console.log(`Actualizando stock consolidado SKU ${item.sku}: Local ${item.oldStock} -> Bind ${item.bindStock}`);
+                const { error: updateError } = await supabase
+                  .from('inventario')
+                  .update({ stock: item.bindStock })
+                  .eq('id', item.id);
+
+                if (updateError) {
+                  console.error(`Error actualizando stock general de item ${item.id}:`, updateError.message);
+                } else {
+                  syncCount++;
+                  updatedItemsList.push({ id: item.id, sku: item.sku, oldStock: item.oldStock, newStock: item.bindStock });
+                }
+              }
+            } else {
+              console.error(`Error de API de Bind obteniendo detalles de SKU ${item.sku}: ${detailResponse.status}`);
+            }
+          } catch (err) {
+            console.error(`Fallo durante la sincronización de SKU ${item.sku}:`, err.message);
+          }
+        }));
+      }
+      
+      console.log(`Sincronización de almacenes finalizada. Se actualizaron ${syncCount} variantes de stock general.`);
     }
 
     return new Response(
@@ -116,8 +181,6 @@ serve(async (req) => {
         syncCount,
         updatedItemsCount: updatedItemsList.length,
         updatedItems: updatedItemsList,
-        inventoryMap, 
-        products,
         productsCount: products.length 
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

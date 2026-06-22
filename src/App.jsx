@@ -52,6 +52,7 @@ const LandingPage = () => {
   );
 };
 
+import { supabase } from './lib/supabase';
 import AdminPanel from './components/AdminPanel';
 import AdminLogin from './components/AdminLogin';
 import SuccessPage from './components/SuccessPage';
@@ -61,6 +62,18 @@ import AnalyticsDashboard from './components/AnalyticsDashboard';
 import CerebroDashboard from './components/CerebroDashboard';
 
 function App() {
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        window.location.href = '/login?type=recovery';
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
   return (
     <Router>
       <PromotionBanner />

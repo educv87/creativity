@@ -43,6 +43,10 @@ const AdminPanel = () => {
 
 
   useEffect(() => {
+    if (window.location.hash.includes('type=recovery') || window.location.hash.includes('recovery')) {
+      navigate('/login' + window.location.hash);
+      return;
+    }
     checkSession();
   }, []);
 
@@ -60,9 +64,7 @@ const AdminPanel = () => {
   const checkSession = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
-      console.warn('No active session, but bypass redirect to allow local testing.');
-      loadAllData();
-      fetchBindProducts();
+      navigate('/login');
     } else {
       loadAllData();
       fetchBindProducts();
@@ -423,6 +425,198 @@ const AdminPanel = () => {
       }
       setLoading(false);
     }
+  };
+
+  const handlePrintTicket = (order) => {
+    if (!order) return;
+    
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert("Por favor permite las ventanas emergentes (pop-ups) para poder imprimir el ticket.");
+      return;
+    }
+
+    const dateFormatted = new Date(order.created_at).toLocaleString('es-MX', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+
+    const itemsHtml = order.items.map(item => `
+      <tr style="border-bottom: 1px solid #eee;">
+        <td style="padding: 8px 0; font-family: sans-serif; font-size: 13px;">
+          <strong>${item.category}</strong><br/>
+          <span style="font-size: 11px; color: #666;">${item.color} • Talla ${item.size}</span>
+        </td>
+        <td style="padding: 8px 0; text-align: center; font-family: sans-serif; font-size: 13px;">${item.quantity}</td>
+        <td style="padding: 8px 0; text-align: right; font-family: sans-serif; font-size: 13px;">$${Number(item.price).toFixed(2)}</td>
+        <td style="padding: 8px 0; text-align: right; font-family: sans-serif; font-size: 13px; font-weight: bold;">$${(Number(item.quantity) * Number(item.price)).toFixed(2)}</td>
+      </tr>
+    `).join('');
+
+    const subtotal = parseFloat(order.total) - parseFloat(order.envio_costo);
+
+    const ticketHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Ticket de Venta #${order.id.slice(0, 8)}</title>
+        <meta charset="utf-8"/>
+        <style>
+          @media print {
+            body { margin: 0; padding: 10px; }
+            button { display: none; }
+          }
+          body {
+            font-family: 'Courier New', Courier, monospace;
+            color: #000;
+            background: #fff;
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 20px;
+            box-sizing: border-box;
+          }
+          .header {
+            text-align: center;
+            margin-bottom: 20px;
+          }
+          .title {
+            font-size: 20px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            margin: 5px 0;
+            font-family: sans-serif;
+          }
+          .divider {
+            border-top: 1px dashed #000;
+            margin: 15px 0;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+          th {
+            border-bottom: 1px dashed #000;
+            padding: 5px 0;
+            font-family: sans-serif;
+            font-size: 12px;
+          }
+          .summary {
+            margin-top: 15px;
+            font-family: sans-serif;
+            font-size: 13px;
+          }
+          .summary-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+          }
+          .total-row {
+            display: flex;
+            justify-content: space-between;
+            font-weight: bold;
+            font-size: 16px;
+            border-top: 1px dashed #000;
+            padding-top: 5px;
+            margin-top: 5px;
+          }
+          .footer {
+            text-align: center;
+            margin-top: 30px;
+            font-size: 12px;
+            font-family: sans-serif;
+            color: #666;
+          }
+          .print-btn {
+            background-color: #000;
+            color: #fff;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 20px;
+            font-family: sans-serif;
+          }
+        </style>
+      </head>
+      <body>
+        <button class="print-btn" onclick="window.print()">Imprimir Ticket</button>
+        
+        <div class="header">
+          <div class="title">CREATIVITY</div>
+          <div style="font-size: 12px; font-family: sans-serif; color: #555;">Tienda Oficial</div>
+        </div>
+
+        <div style="font-size: 12px; line-height: 1.4;">
+          <strong>Ticket:</strong> #${order.id.slice(0, 8)}<br/>
+          <strong>Fecha:</strong> ${dateFormatted}<br/>
+          <strong>Estado:</strong> ${order.status.toUpperCase()}<br/>
+        </div>
+
+        <div class="divider"></div>
+
+        <div style="font-size: 12px; line-height: 1.4; margin-bottom: 10px;">
+          <strong>Cliente:</strong> ${order.cliente_nombre}<br/>
+          <strong>Email:</strong> ${order.cliente_email}<br/>
+          <strong>Tel:</strong> ${order.cliente_telefono}<br/>
+          <strong>Dirección:</strong> ${order.direccion}<br/>
+          <strong>C.P.:</strong> ${order.codigo_postal}
+        </div>
+
+        <div class="divider"></div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="text-align: left;">Artículo</th>
+              <th style="text-align: center; width: 50px;">Cant</th>
+              <th style="text-align: right; width: 80px;">P.Unit</th>
+              <th style="text-align: right; width: 80px;">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsHtml}
+          </tbody>
+        </table>
+
+        <div class="divider"></div>
+
+        <div class="summary">
+          <div class="summary-row">
+            <span>Subtotal:</span>
+            <span>$${subtotal.toFixed(2)}</span>
+          </div>
+          <div class="summary-row">
+            <span>Costo de Envío:</span>
+            <span>$${parseFloat(order.envio_costo).toFixed(2)}</span>
+          </div>
+          <div class="total-row">
+            <span>TOTAL:</span>
+            <span>$${parseFloat(order.total).toFixed(2)}</span>
+          </div>
+        </div>
+
+        <div class="footer">
+          ¡Gracias por tu compra!<br/>
+          creativity.mx
+        </div>
+
+        <script>
+          window.onload = function() {
+            window.print();
+          };
+        </script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(ticketHtml);
+    printWindow.document.close();
   };
 
   const handleImageUpload = async (e) => {
@@ -1932,7 +2126,7 @@ WITH CHECK (true);`}
             </div>
 
             <div className="p-8 bg-black/20 border-t border-white/5 flex justify-end gap-4">
-              <button className="px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-bold transition-all text-sm">Imprimir Ticket</button>
+              <button onClick={() => handlePrintTicket(selectedOrder)} className="px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-bold transition-all text-sm">Imprimir Ticket</button>
               {selectedOrder.status === 'pendiente' ? (
                 <button 
                   onClick={() => handleMarkAsPaid(selectedOrder.id)}
