@@ -1,11 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import InteractiveShowcase from './components/InteractiveShowcase';
 import StorytellingSection from './components/StorytellingSection';
 import TestimonialsSection from './components/TestimonialsSection';
 import CheckoutPage from './components/CheckoutPage';
 import { fetchProjectData } from './lib/data';
 import { trackEvent } from './lib/analytics';
+import WhatsAppButton from './components/WhatsAppButton';
+
+const PublicWhatsAppButton = () => {
+  const location = useLocation();
+  const publicPaths = ['/', '/crear-pedido'];
+  if (!publicPaths.includes(location.pathname)) return null;
+  return <WhatsAppButton />;
+};
 
 const LandingPage = () => {
   const [colors, setColors] = useState([]);
@@ -86,6 +94,7 @@ function App() {
         <Route path="/admin-analitica" element={<AnalyticsDashboard />} />
         <Route path="/cerebro" element={<CerebroDashboard />} />
       </Routes>
+      <PublicWhatsAppButton />
       <FeedbackWidget />
     </Router>
   );

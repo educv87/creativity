@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-
-// SVG Wave Divider for organic transitions between color blocks
+import { useNavigate } from 'react-router-dom';
+import TrustBadges from './TrustBadges';
 const WaveDivider = ({ fill, bgClass = 'bg-transparent', animated = false }) => (
   <div className={`w-full overflow-hidden leading-[0] ${bgClass}`}>
     {animated ? (
@@ -24,8 +24,6 @@ const Sticker = ({ children, className = '', style = {} }) => (
     {children}
   </div>
 );
-
-import { useNavigate } from 'react-router-dom';
 
 // Botón de acción principal
 const CreateOrderBtn = ({ className = "" }) => {
@@ -373,6 +371,9 @@ const StorytellingSection = () => {
           <div className="mt-8 text-center relative z-30">
             <CreateOrderBtn />
           </div>
+
+          {/* Seccion de certezas e insignias de confianza */}
+          <TrustBadges className="mt-16 mb-8 relative z-30" />
 
           {/* Preguntas Frecuentes - Landing Page Version */}
           <div className="mt-32 max-w-4xl mx-auto text-left relative z-30">
